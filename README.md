@@ -7,7 +7,7 @@ A university practical: a small web app, run entirely in Docker, where users reg
 | Part | State |
 |------|-------|
 | S3 storage (upload, presigned download, cleanup) | **Working, tested** |
-| Express API routes for files | Working, auth is a pass-through stub |
+| Express API routes for files | Session-protected uploads and download URL requests; file ownership checks pending |
 | PostgreSQL (`users`, `files`, `session`) | Accounts and sessions wired; file records not wired yet |
 | Registration, login, logout, sessions (bcrypt, express-session) | Route tests and type checking pass on Node 24; PostgreSQL storage and session persistence verified through Nginx |
 | Web servers (Nginx + Apache) | Configuration checks and page/API routing verified in Docker |
@@ -63,7 +63,7 @@ Storage failures come back as human messages: 404 file not found, 502 bad creden
     │   └── utils/
     │       ├── database.ts   # shared PostgreSQL connection pool
     │       ├── minio/        # client.ts (S3 clients + config), objects.ts (upload, download, cleanup)
-    │       └── server/       # session.ts, errors.ts, auth.ts (file protection stub)
+    │       └── server/       # sessions, errors and file-route authentication
     └── test/                 # auth.test.ts and minio.test.ts
 ```
 
@@ -130,14 +130,30 @@ The existing schema already contains the required account/session tables; no res
 of an existing database volume is needed for this step. The backend checks that
 these tables exist at startup.
 
-File routes still use the pass-through `requireAuth` stub. Replacing that stub is
-the next step, followed by file metadata persistence and ownership checks. File
-listing and the frontend are still pending. Authentication tests use an isolated
+All `/api/files` endpoints require a signed session cookie for an existing user.
+Anonymous, invalid, expired and logged-out sessions return `401` before multipart
+parsing or storage access. Sessions for deleted accounts are destroyed and rejected.
+Database lookup failures return `500` without granting access. The middleware
+attaches the current account to `req.user` for later metadata/ownership integration.
+The guard covers the whole file namespace so new file endpoints inherit protection.
+Registration and login remain public; `/api/auth/me` checks its own session.
+
+File metadata persistence, ownership checks, file listing and the frontend are
+still pending. An authenticated user who knows another file's key can still
+request its download URL until ownership checks are implemented. Presigned URLs
+are temporary bearer links: once issued, storage accepts them until expiry even
+if the application session is logged out.
+
+Authentication and route-protection tests use an isolated
 in-memory repository/session store. Manual Docker integration checks verified
 registration, stored bcrypt hashes, duplicate-account rejection, PostgreSQL session
 storage, session persistence after a backend restart, login/session ID rotation,
 invalid-password rejection, and logout invalidation. The temporary verification
-account and its sessions were removed afterward. Automated PostgreSQL integration
+account and its sessions were removed afterward. File-route integration checks
+also verified authenticated PDF upload/download, anonymous/invalid-cookie rejection,
+expired/logout/deleted-account session rejection, and that an unauthorized download
+request does not consume the stored file. Temporary verification files were removed.
+Automated PostgreSQL integration
 regression tests remain to be added.
 
 ## Switching to Amazon S3

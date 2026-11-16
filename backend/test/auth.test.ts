@@ -9,6 +9,8 @@ import type { Account, UserRepository } from "../src/routes/auth/users.ts";
 
 // Route tests deliberately use an in-memory repository/store; production always uses PostgreSQL.
 const accounts: Account[] = [];
+let userLookupFails = false;
+let protectedHandlerCalls = 0;
 const users: UserRepository = {
     async create(username, email, password_hash) {
         if (accounts.some((account) => account.username === username || account.email === email)) {
@@ -20,6 +22,7 @@ const users: UserRepository = {
     },
     async findByEmail(email) { return accounts.find((account) => account.email === email); },
     async findById(id) {
+        if (userLookupFails) throw new Error("Database is unavailable");
         const account = accounts.find((account) => account.id === id);
         if (!account) return undefined;
         return { id: account.id, username: account.username, email: account.email };
@@ -32,9 +35,17 @@ const store = new session.MemoryStore();
 
 before(async () => {
     const app = createApp(users, store, "test-secret-that-is-at-least-32-characters");
+    // Probe handlers isolate authentication from multipart parsing and S3 operations.
+    const protectedHandler: import("express").RequestHandler = (req, res) => {
+        protectedHandlerCalls++;
+        res.json({ user: req.user });
+    };
+    app.post("/api/files", protectedHandler);
+    app.get("/api/files/:key/download", protectedHandler);
+    app.get("/api/files/future-route", protectedHandler);
     app.use(handleErrors);
     server = await new Promise<Server>((resolve, reject) => {
-        const listener = app.listen(0, "127.0.0.1", () => resolve(listener));
+        const listener = app.listen(0, "127.0.0.1", (error?: Error) => error ? reject(error) : resolve(listener));
         listener.on("error", reject);
     });
     baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}/api/auth`;
@@ -42,7 +53,7 @@ before(async () => {
 
 after(async () => {
     store.clear();
-    if (server) await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+    if (server?.listening) await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
 });
 
 async function post(path: string, body: unknown, cookie?: string) {
@@ -135,4 +146,87 @@ test("cross-site form submissions and malformed JSON do not reach authentication
     assert.equal(malformed.status, 400);
     const oversized = await post("login", { email: "a".repeat(20000), password: "password-123" });
     assert.equal(oversized.status, 413);
+});
+
+async function fileRequests(cookie?: string) {
+    const headers = cookie ? { Cookie: cookie } : undefined;
+    return [
+        await fetch(`${baseUrl}/../files`, { method: "POST", headers, body: "unparsed upload body" }),
+        await fetch(`${baseUrl}/../files/example.pdf/download`, { headers }),
+        await fetch(`${baseUrl}/../files/future-route`, { headers }),
+    ];
+}
+
+async function expectFileRequestsDenied(cookie?: string, status = 401) {
+    const callsBefore = protectedHandlerCalls;
+    for (const response of await fileRequests(cookie)) {
+        assert.equal(response.status, status);
+        assert.equal(response.headers.get("cache-control"), "no-store");
+        assert.deepEqual(await response.json(), { error: status === 401 ? "You are not logged in" : "Could not complete the request" });
+    }
+    assert.equal(protectedHandlerCalls, callsBefore, "rejected requests never reach file handlers");
+}
+
+async function registerTestAccount(username: string) {
+    const response = await post("register", { username, email: `${username}@example.com`, password: "test-password-123" });
+    assert.equal(response.status, 201);
+    return { cookie: getCookie(response), user: (await response.json()).user as { id: number; username: string; email: string } };
+}
+
+async function findStoredSession(userId: number) {
+    const sessions = await new Promise<Record<string, session.SessionData>>((resolve, reject) => {
+        store.all((error, entries) => error ? reject(error) : resolve(entries as Record<string, session.SessionData>));
+    });
+    const entry = Object.entries(sessions).find(([, data]) => data.userId === userId);
+    assert.ok(entry, "registered account has a stored session");
+    return entry;
+}
+
+test("all file endpoints reject anonymous and tampered-cookie requests before file handling", async () => {
+    await expectFileRequestsDenied();
+    await expectFileRequestsDenied("os.sid=tampered");
+});
+
+test("a valid session reaches file endpoints with the current user attached", async () => {
+    const account = await registerTestAccount("protected-user");
+    for (const response of await fileRequests(account.cookie)) {
+        assert.equal(response.status, 200);
+        assert.deepEqual(await response.json(), { user: account.user });
+    }
+});
+
+test("file endpoints reject logged-out sessions", async () => {
+    const account = await registerTestAccount("logged-out-user");
+    assert.equal((await post("logout", {}, account.cookie)).status, 204);
+    await expectFileRequestsDenied(account.cookie);
+});
+
+test("file endpoints reject expired sessions", async () => {
+    const account = await registerTestAccount("expired-user");
+    const [id, data] = await findStoredSession(account.user.id);
+    data.cookie.expires = new Date(Date.now() - 1000);
+    await new Promise<void>((resolve, reject) => store.set(id, data, (error) => error ? reject(error) : resolve()));
+    await expectFileRequestsDenied(account.cookie);
+});
+
+test("file endpoints reject deleted accounts and destroy their stale session", async () => {
+    const account = await registerTestAccount("deleted-user");
+    const [id] = await findStoredSession(account.user.id);
+    accounts.splice(accounts.findIndex((entry) => entry.id === account.user.id), 1);
+    await expectFileRequestsDenied(account.cookie);
+    const remaining = await new Promise<session.SessionData | null | undefined>((resolve, reject) => {
+        store.get(id, (error, data) => error ? reject(error) : resolve(data));
+    });
+    assert.equal(remaining, undefined);
+});
+
+test("database lookup failures return 500 without granting file access", async (t) => {
+    const account = await registerTestAccount("database-error-user");
+    t.mock.method(console, "error", () => {});
+    userLookupFails = true;
+    try {
+        await expectFileRequestsDenied(account.cookie, 500);
+    } finally {
+        userLookupFails = false;
+    }
 });
