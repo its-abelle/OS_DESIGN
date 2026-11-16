@@ -7,6 +7,7 @@ import session from "express-session";
 import { createApp, handleErrors } from "../src/app.ts";
 import { createAddFile } from "../src/routes/files/post.ts";
 import { createDownloadFile } from "../src/routes/files/download.ts";
+import { createListFiles } from "../src/routes/files/list.ts";
 import type { DownloadStorage } from "../src/routes/files/download.ts";
 import type { UploadStorage } from "../src/routes/files/post.ts";
 import type { FileRepository, NewFile } from "../src/routes/files/repository.ts";
@@ -22,6 +23,8 @@ const uploadedKeys: string[] = [];
 const deletedKeys: string[] = [];
 const downloadCalls: string[] = [];
 const ownershipLookups: { key: string; userId: number }[] = [];
+const listingCalls: number[] = [];
+const availabilityCalls: string[] = [];
 const errorLog = mock.method(console, "error", () => {});
 let failMetadata = false;
 let failUpload = false;
@@ -30,6 +33,8 @@ let insertCalls = 0;
 let uploadCalls = 0;
 let failOwnershipLookup = false;
 let downloadError: Error | undefined;
+let failListing = false;
+let failAvailability = false;
 
 const files: FileRepository = {
     async create(file) {
@@ -42,6 +47,15 @@ const files: FileRepository = {
         ownershipLookups.push({ key, userId });
         if (failOwnershipLookup) throw new Error("Private database lookup details");
         return records.some((file) => file.key === key && file.uploadedBy === userId);
+    },
+    async listOwnedBy(userId, limit, beforeId) {
+        listingCalls.push(userId);
+        if (failListing) throw new Error("Private database listing details");
+        const all = records.map((file, index) => ({ ...file, id: index + 1, createdAt }))
+            .filter((file) => file.uploadedBy === userId && (beforeId === undefined || file.id < beforeId))
+            .sort((a, b) => b.id - a.id);
+        const entries = all.slice(0, limit);
+        return { files: entries, nextCursor: all.length > limit ? entries.at(-1)!.id : null };
     },
 };
 const downloads: DownloadStorage = {
@@ -84,6 +98,14 @@ before(async () => {
         async findById(id) { return [user, otherUser].find((account) => account.id === id); },
     }, store, "test-secret-that-is-at-least-32-characters");
     app.post("/api/files", createAddFile(files, storage));
+    app.get("/api/files", createListFiles(files, {
+        maxUploadBytes: storage.maxUploadBytes,
+        async isUploadedPdfAvailable(key) {
+            availabilityCalls.push(key);
+            if (failAvailability) throw new UserFacingError("File storage is unreachable, try again shortly", 503);
+            return objects.has(key);
+        },
+    }));
     app.get("/api/files/:key/download", createDownloadFile(files, downloads));
     app.use(handleErrors);
     server = await new Promise<Server>((resolve, reject) => {
@@ -108,9 +130,11 @@ before(async () => {
 beforeEach(() => {
     records.length = uploadedKeys.length = deletedKeys.length = 0;
     downloadCalls.length = ownershipLookups.length = 0;
+    listingCalls.length = availabilityCalls.length = 0;
     objects.clear();
     failMetadata = failUpload = failRollback = false;
     failOwnershipLookup = false;
+    failListing = failAvailability = false;
     downloadError = undefined;
     insertCalls = uploadCalls = 0;
     errorLog.mock.resetCalls();
@@ -275,4 +299,72 @@ test("storage failures after an ownership check retain the safe storage error re
     assert.deepEqual(await response.json(), { error: "File storage is unreachable, try again shortly" });
     assert.deepEqual(downloadCalls, [file.key]);
     assert.ok(objects.has(file.key));
+});
+
+test("listing an empty drawer returns an empty page and the actual upload limit", async () => {
+    const response = await fetch(`${baseUrl}/api/files`, { headers: { Cookie: cookie } });
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { files: [], nextCursor: null, maxUploadBytes: storage.maxUploadBytes });
+    assert.equal(availabilityCalls.length, 0);
+});
+
+test("listing returns only the session owner's records in stable pages", async () => {
+    for (let index = 0; index < 5; index++) {
+        await files.create({ key: `${randomUUID()}.pdf`, originalFilename: `file-${index}.pdf`, mimeType: "application/pdf", sizeBytes: pdf.length, uploadedBy: user.id });
+    }
+    const privateFile = await files.create({ key: `${randomUUID()}.pdf`, originalFilename: "private.pdf", mimeType: "application/pdf", sizeBytes: pdf.length, uploadedBy: otherUser.id });
+    const first = await fetch(`${baseUrl}/api/files?limit=2&uploadedBy=${otherUser.id}`, { headers: { Cookie: cookie } });
+    const firstPage = await first.json();
+    assert.equal(first.status, 200);
+    assert.deepEqual(firstPage.files.map((file: { id: number }) => file.id), [5, 4]);
+    assert.equal(firstPage.nextCursor, 4);
+    const second = await fetch(`${baseUrl}/api/files?limit=2&before=4`, { headers: { Cookie: cookie } });
+    assert.deepEqual((await second.json()).files.map((file: { id: number }) => file.id), [3, 2]);
+    const last = await fetch(`${baseUrl}/api/files?limit=2&before=2`, { headers: { Cookie: cookie } });
+    const lastPage = await last.json();
+    assert.deepEqual(lastPage.files.map((file: { id: number }) => file.id), [1]);
+    assert.equal(lastPage.nextCursor, null);
+    assert.deepEqual(listingCalls, [user.id, user.id, user.id]);
+    assert.ok(!availabilityCalls.includes(privateFile.key));
+});
+
+test("listing keeps upload receipts but marks consumed PDFs unavailable", async () => {
+    const file = await (await upload(multipart())).json();
+    const list = () => fetch(`${baseUrl}/api/files`, { headers: { Cookie: cookie } });
+    const available = await (await list()).json();
+    assert.equal(available.files[0].available, true);
+    assert.equal(available.files[0].originalFilename, "lecture.pdf");
+    assert.equal((await fetch(`${baseUrl}/api/files/${file.key}/download`, { headers: { Cookie: cookie } })).status, 200);
+    const consumed = await (await list()).json();
+    assert.equal(consumed.files.length, 1);
+    assert.equal(consumed.files[0].available, false);
+    assert.equal(consumed.files[0].id, file.id);
+});
+
+test("invalid listing pagination is rejected before repository or storage calls", async () => {
+    for (const query of ['limit=0', 'limit=21', 'limit=1.5', 'limit=1&limit=2', 'before=0', 'before=abc', 'before=2147483648']) {
+        const response = await fetch(`${baseUrl}/api/files?${query}`, { headers: { Cookie: cookie } });
+        assert.equal(response.status, 400);
+    }
+    assert.equal(listingCalls.length, 0);
+    assert.equal(availabilityCalls.length, 0);
+});
+
+test("anonymous listing cannot read records or inspect storage", async () => {
+    assert.equal((await fetch(`${baseUrl}/api/files`)).status, 401);
+    assert.equal(listingCalls.length, 0);
+    assert.equal(availabilityCalls.length, 0);
+});
+
+test("listing failures expose safe errors instead of partial records or database details", async () => {
+    failListing = true;
+    const dbResponse = await fetch(`${baseUrl}/api/files`, { headers: { Cookie: cookie } });
+    assert.equal(dbResponse.status, 500);
+    assert.deepEqual(await dbResponse.json(), { error: "Failed to list files" });
+    failListing = false;
+    await upload(multipart());
+    failAvailability = true;
+    const storageResponse = await fetch(`${baseUrl}/api/files`, { headers: { Cookie: cookie } });
+    assert.equal(storageResponse.status, 503);
+    assert.deepEqual(await storageResponse.json(), { error: "File storage is unreachable, try again shortly" });
 });

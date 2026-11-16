@@ -7,6 +7,7 @@ import {
     DeleteObjectsCommand,
     GetObjectCommand,
     HeadBucketCommand,
+    HeadObjectCommand,
     ListObjectsV2Command,
     PutObjectCommand,
 } from "@aws-sdk/client-s3";
@@ -82,6 +83,18 @@ export async function deleteUploadedPdf(key: string) {
     }
 }
 
+// Listing only checks keys returned by the caller's PostgreSQL ownership query.
+export async function isUploadedPdfAvailable(key: string) {
+    if (!KEY_PATTERN.test(key)) throw new UserFacingError("Invalid file key");
+    try {
+        await storageClient.send(new HeadObjectCommand({ Bucket: BUCKET, Key: key }));
+        return true;
+    } catch (error: any) {
+        if (NOT_FOUND_ERRORS.includes(error?.name)) return false;
+        throw toUserFacing(error);
+    }
+}
+
 // Moves the file out of the live area, then signs a short-lived URL for the moved copy.
 // deleteDownloadedFiles removes it once the URL has expired.
 export async function getDownloadUrl(key: string) {
@@ -102,7 +115,7 @@ export async function getDownloadUrl(key: string) {
         // 3. Sign the moved copy
         return await getSignedUrl(
             signingClient,
-            new GetObjectCommand({ Bucket: BUCKET, Key: downloadedKey }),
+            new GetObjectCommand({ Bucket: BUCKET, Key: downloadedKey, ResponseContentDisposition: "attachment" }),
             { expiresIn: PRESIGN_SECONDS },
         );
     } catch (error) {

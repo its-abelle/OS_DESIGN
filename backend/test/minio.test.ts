@@ -4,7 +4,7 @@ import test from "node:test";
 
 // Running on the host, so reach MinIO through the published port
 process.env.S3_ENDPOINT = process.env.S3_PUBLIC_ENDPOINT;
-const { deleteDownloadedFiles, deleteUploadedPdf, ensureBucket, getDownloadUrl, uploadPdf } = await import("#utils/minio/objects.ts");
+const { deleteDownloadedFiles, deleteUploadedPdf, ensureBucket, getDownloadUrl, isUploadedPdfAvailable, uploadPdf } = await import("#utils/minio/objects.ts");
 
 const PDF = Buffer.from("%PDF-1.4\nhello\n%%EOF");
 
@@ -40,7 +40,9 @@ test("rejects keys outside the expected shape", async () => {
 
 test("upload rollback deletes only the uploaded object and can be retried", async () => {
     const key = await uploadPdf(PDF);
+    assert.equal(await isUploadedPdfAvailable(key), true);
     await deleteUploadedPdf(key);
+    assert.equal(await isUploadedPdfAvailable(key), false);
     await deleteUploadedPdf(key);
     await assert.rejects(getDownloadUrl(key), { status: 404 });
 });
