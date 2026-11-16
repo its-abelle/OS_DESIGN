@@ -1,0 +1,25 @@
+{
+    "name": "backend",
+    "private": true,
+    "type": "module",
+    "imports": {
+        "#*": "./src/*"
+    },
+    "scripts": {
+        "start": "node src/index.ts",
+        "test": "node --env-file=../.env --test test/*.test.ts",
+        "typecheck": "tsc"
+    },
+    "dependencies": {
+        "@aws-sdk/client-s3": "^3",
+        "@aws-sdk/s3-request-presigner": "^3",
+        "express": "^5",
+        "multer": "^2"
+    },
+    "devDependencies": {
+        "@types/express": "^5.0.6",
+        "@types/multer": "^2.3.0",
+        "@types/node": "^26.6.6",
+        "typescript": "^7.0.2"
+    }
+}
