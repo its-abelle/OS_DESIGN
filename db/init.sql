@@ -14,7 +14,7 @@ CREATE TABLE files (
   uploaded_by INT NOT NULL REFERENCES users(id),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
--- connect-pg-simple session table (add when auth is built)
+-- connect-pg-simple session table
 CREATE TABLE session (
   sid VARCHAR PRIMARY KEY, sess JSON NOT NULL, expire TIMESTAMP(6) NOT NULL
 );

@@ -1,14 +1,20 @@
 // index.ts
-import express from "express";
+import { createApp, handleErrors } from "./app.ts";
+import { pool } from "#utils/database.ts";
+import { createSessionStore } from "#utils/server/session.ts";
+import { createUserRepository } from "#routes/auth/users.ts";
 import filesRouter from "#routes/files/index.ts";
 import { deleteDownloadedFiles, DOWNLOAD_GRACE_MS, ensureBucket } from "#utils/minio/objects.ts";
 
 const PORT = parseInt(process.env.PORT ?? "", 10) || 3000;
-const app = express();
+const app = createApp(createUserRepository(pool), createSessionStore(pool), process.env.SESSION_SECRET ?? "");
 
 app.use("/api/files", filesRouter);
+app.use(handleErrors);
 
 // 1. Make sure storage is ready before taking traffic
+await pool.query("SELECT id FROM users LIMIT 0");
+await pool.query('SELECT sid FROM "session" LIMIT 0');
 await ensureBucket();
 
 // 2. Sweep downloaded files whose URLs have expired
