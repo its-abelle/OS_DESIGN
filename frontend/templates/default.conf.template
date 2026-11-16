@@ -2,6 +2,11 @@ server {
   listen 80;
   # Derived from MAX_UPLOAD_MB (+1 MB multipart overhead) by 15-upload-limit.envsh
   client_max_body_size ${NGINX_MAX_BODY_MB}m;
+  # Preserve the browser-facing host (including its port) for upstream redirects.
+  proxy_set_header Host $http_host;
+  proxy_set_header X-Real-IP $remote_addr;
+  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+  proxy_set_header X-Forwarded-Proto $scheme;
   location /api/ { proxy_pass http://backend:3000; }
-  location / { root /usr/share/nginx/html; index index.html; }
+  location / { proxy_pass http://apache:80; }
 }

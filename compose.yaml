@@ -8,7 +8,7 @@ services:
     ports: ["9100:9000", "9101:9001"]   # host 9000/9001 taken by another project; 9100 must be browser-reachable
     volumes: [minio_data:/data]
 
-  database:   # STUB: schema only, not wired to backend yet
+  database:   # Stores accounts and sessions; file metadata integration comes next
     image: postgres:17-alpine
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
@@ -28,14 +28,18 @@ services:
       minio: { condition: service_started }
       database: { condition: service_healthy }
 
-  frontend:   # STUB: nginx + placeholder page
+  apache:   # Serves the frontend HTML/CSS/JS on the internal Docker network
+    image: httpd:2.4-alpine
+    volumes:
+      - ./frontend/public:/usr/local/apache2/htdocs:ro
+
+  frontend:   # Nginx entry point; the UI is still a placeholder
     image: nginx:stable-alpine
     ports: ["8080:80"]
     environment: { MAX_UPLOAD_MB: "${MAX_UPLOAD_MB:-10}" }   # same value the backend enforces
     volumes:
       - ./frontend/templates:/etc/nginx/templates:ro
       - ./frontend/15-upload-limit.envsh:/docker-entrypoint.d/15-upload-limit.envsh:ro
-      - ./frontend/public:/usr/share/nginx/html:ro
-    depends_on: [backend]
+    depends_on: [backend, apache]
 
 volumes: { minio_data: {}, pgdata: {} }
