@@ -7,7 +7,7 @@ A university practical: a small web app, run entirely in Docker, where users reg
 | Part | State |
 |------|-------|
 | S3 storage (upload, presigned download, cleanup) | **Working, tested** |
-| Express API routes for files | Session-protected uploads and download URL requests; file ownership checks pending |
+| Express API routes for files | Session-protected uploads and owner-only download URL requests |
 | PostgreSQL (`users`, `files`, `session`) | Accounts, sessions and new upload metadata wired |
 | Registration, login, logout, sessions (bcrypt, express-session) | Route tests and type checking pass on Node 24; PostgreSQL storage and session persistence verified through Nginx |
 | Web servers (Nginx + Apache) | Configuration checks and page/API routing verified in Docker |
@@ -35,7 +35,7 @@ Browser ──:8080──> frontend (Nginx) ──/──────> apache (H
 ## How storage works
 
 1. **Upload** (`POST /api/files`, multipart field `file`): the body is size-capped (`MAX_UPLOAD_MB`, default 10), the first bytes must be `%PDF-` (checked on content, not on the client's mime type), and the object gets a random UUID key.
-2. **Download** (`GET /api/files/:key/download`): the object is moved to `downloaded/<key>`, the live copy is deleted, and a presigned URL for the moved copy is returned. A file can be downloaded once; a second request gets 404.
+2. **Download** (`GET /api/files/:key/download`): PostgreSQL first verifies that the logged-in user uploaded the file. Missing metadata and other users' files both return `404` before storage is accessed. An authorized request moves the object to `downloaded/<key>`, deletes the live copy, and returns a presigned URL for the moved copy. A second sequential URL request gets `404`; issued URLs remain reusable until expiry, and concurrent requests are not yet claimed atomically.
 3. **Cleanup**: `deleteDownloadedFiles()` runs on an interval in the backend and deletes everything under `downloaded/` older than the URL lifetime plus one minute. It's stateless, so it survives restarts and is safe to run from several instances.
 
 Storage failures come back as human messages: 404 file not found, 502 bad credentials, 503 storage unreachable. The process never crashes on them.
@@ -60,7 +60,7 @@ Storage failures come back as human messages: 404 file not found, 502 bad creden
     │   ├── index.ts          # database checks, bucket check, file routes, cleanup
     │   ├── routes/auth/      # registration/login/logout/me and user repository
     │   ├── routes/files/     # router, upload handler factory and download handler
-    │   │                     # repository.ts persists upload metadata
+    │   │                     # repository.ts persists metadata and checks ownership
     │   └── utils/
     │       ├── database.ts   # shared PostgreSQL connection pool
     │       ├── minio/        # client.ts (S3 clients + config), objects.ts (upload, download, cleanup)
@@ -87,7 +87,7 @@ npm ci
 npm test                           # auth route tests and storage tests against MinIO
 npm run typecheck
 npm run test:auth                  # auth route tests; no MinIO or database required
-npm run test:files                 # upload metadata/rollback tests; no services required
+npm run test:files                 # metadata, rollback and ownership tests; no services required
 ```
 
 MinIO console: http://localhost:9101 (log in with `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` from `.env`). Host ports 9100/9101 are used because 9000/9001 are commonly taken.
@@ -136,13 +136,14 @@ All `/api/files` endpoints require a signed session cookie for an existing user.
 Anonymous, invalid, expired and logged-out sessions return `401` before multipart
 parsing or storage access. Sessions for deleted accounts are destroyed and rejected.
 Database lookup failures return `500` without granting access. The middleware
-attaches the current account to `req.user` for upload attribution and later ownership checks.
+attaches the current account to `req.user` for upload attribution and ownership checks.
 The guard covers the whole file namespace so new file endpoints inherit protection.
 Registration and login remain public; `/api/auth/me` checks its own session.
 
-File ownership checks, file listing and the frontend are still pending.
-An authenticated user who knows another file's key can still
-request its download URL until ownership checks are implemented. Presigned URLs
+File listing and the frontend are still pending. Download URL requests are scoped
+to the logged-in user's ID and the file's storage key using a parameterized query.
+Other users' files and missing metadata both return `404` with `File not found`.
+Database ownership lookup failures return `500` without accessing storage. Presigned URLs
 are temporary bearer links: once issued, storage accepts them until expiry even
 if the application session is logged out.
 
@@ -177,6 +178,8 @@ PostgreSQL; crashes or uncertain network outcomes can still require reconciliati
 The existing `files` schema already supports these records, so this step does not
 require resetting database volumes. Metadata applies to new uploads; older stored
 objects are not backfilled because their owners are unknown. Upload metadata is
+required for downloads, so older objects without metadata cannot receive new
+download URLs; upload them again under the correct account. Upload metadata is
 retained when downloads move/delete the PDF, so it records upload history rather
 than guaranteeing that the object is still available. File listing and download
 state tracking will need to account for that lifecycle.
@@ -186,6 +189,14 @@ client-supplied uploader/size fields are ignored, metadata survives a backend
 restart, and the uploaded PDF can still be downloaded. Temporary verification
 rows and storage objects were removed. Automated tests cover metadata insertion,
 input rejection, storage errors, insert rollback and cleanup failure handling.
+
+Ownership tests cover cross-user requests, spoofed owner parameters, missing or
+untracked keys, failed database lookups, and storage failures after authorization.
+Manual checks with two real accounts through Nginx verified that each user can
+download their own PDF, cannot obtain a URL for the other user's PDF, and cannot
+consume it through a rejected request. Unknown keys, SQL-like key values and
+objects without metadata returned `404`. Temporary accounts, records and PDFs
+were removed afterward.
 
 ## Switching to Amazon S3
 

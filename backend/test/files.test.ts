@@ -6,23 +6,30 @@ import type { AddressInfo } from "node:net";
 import session from "express-session";
 import { createApp, handleErrors } from "../src/app.ts";
 import { createAddFile } from "../src/routes/files/post.ts";
+import { createDownloadFile } from "../src/routes/files/download.ts";
+import type { DownloadStorage } from "../src/routes/files/download.ts";
 import type { UploadStorage } from "../src/routes/files/post.ts";
 import type { FileRepository, NewFile } from "../src/routes/files/repository.ts";
 import { UserFacingError } from "../src/utils/server/errors.ts";
 
 const user = { id: 42, username: "metadata-user", email: "metadata@example.com" };
+const otherUser = { id: 43, username: "other-user", email: "other@example.com" };
 const createdAt = new Date("2026-11-16T00:00:00Z");
 const pdf = Buffer.from("%PDF-1.4\nmetadata test\n%%EOF");
 const records: NewFile[] = [];
 const objects = new Map<string, Buffer>();
 const uploadedKeys: string[] = [];
 const deletedKeys: string[] = [];
+const downloadCalls: string[] = [];
+const ownershipLookups: { key: string; userId: number }[] = [];
 const errorLog = mock.method(console, "error", () => {});
 let failMetadata = false;
 let failUpload = false;
 let failRollback = false;
 let insertCalls = 0;
 let uploadCalls = 0;
+let failOwnershipLookup = false;
+let downloadError: Error | undefined;
 
 const files: FileRepository = {
     async create(file) {
@@ -30,6 +37,21 @@ const files: FileRepository = {
         if (failMetadata) throw new Error("Private database error details");
         records.push(file);
         return { ...file, id: records.length, createdAt };
+    },
+    async isOwnedBy(key, userId) {
+        ownershipLookups.push({ key, userId });
+        if (failOwnershipLookup) throw new Error("Private database lookup details");
+        return records.some((file) => file.key === key && file.uploadedBy === userId);
+    },
+};
+const downloads: DownloadStorage = {
+    presignSeconds: 60,
+    async getDownloadUrl(key) {
+        downloadCalls.push(key);
+        if (downloadError) throw downloadError;
+        if (!objects.has(key)) throw new UserFacingError("File not found", 404);
+        objects.delete(key);
+        return `https://storage.example/downloaded/${key}?signature=test`;
     },
 };
 const storage: UploadStorage = {
@@ -52,15 +74,17 @@ const storage: UploadStorage = {
 let server: Server;
 let baseUrl: string;
 let cookie: string;
+let otherCookie: string;
 const store = new session.MemoryStore();
 
 before(async () => {
     const app = createApp({
-        async create() { return user; },
+        async create(username) { return username === otherUser.username ? otherUser : user; },
         async findByEmail() { return undefined; },
-        async findById(id) { return id === user.id ? user : undefined; },
+        async findById(id) { return [user, otherUser].find((account) => account.id === id); },
     }, store, "test-secret-that-is-at-least-32-characters");
     app.post("/api/files", createAddFile(files, storage));
+    app.get("/api/files/:key/download", createDownloadFile(files, downloads));
     app.use(handleErrors);
     server = await new Promise<Server>((resolve, reject) => {
         const listener = app.listen(0, "127.0.0.1", (error?: Error) => error ? reject(error) : resolve(listener));
@@ -73,12 +97,21 @@ before(async () => {
     });
     assert.equal(registration.status, 201);
     cookie = registration.headers.get("set-cookie")!.split(";")[0]!;
+    const otherRegistration = await fetch(`${baseUrl}/api/auth/register`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...otherUser, password: "metadata-test-password" }),
+    });
+    assert.equal(otherRegistration.status, 201);
+    otherCookie = otherRegistration.headers.get("set-cookie")!.split(";")[0]!;
 });
 
 beforeEach(() => {
     records.length = uploadedKeys.length = deletedKeys.length = 0;
+    downloadCalls.length = ownershipLookups.length = 0;
     objects.clear();
     failMetadata = failUpload = failRollback = false;
+    failOwnershipLookup = false;
+    downloadError = undefined;
     insertCalls = uploadCalls = 0;
     errorLog.mock.resetCalls();
 });
@@ -168,4 +201,78 @@ test("cleanup failure still returns a failed upload and records the orphan key f
     assert.deepEqual(deletedKeys, uploadedKeys);
     assert.equal(objects.size, 1);
     assert.ok(errorLog.mock.calls.some((call) => call.arguments[1]?.key === uploadedKeys[0]));
+});
+
+test("another user cannot obtain a download URL or consume the owner's PDF", async () => {
+    const uploaded = await upload(multipart());
+    assert.equal(uploaded.status, 201);
+    const file = await uploaded.json();
+    const denied = await fetch(`${baseUrl}/api/files/${file.key}/download?uploadedBy=${user.id}&userId=${user.id}`, {
+        headers: { Cookie: otherCookie },
+    });
+    assert.equal(denied.status, 404);
+    assert.deepEqual(await denied.json(), { error: "File not found" });
+    assert.deepEqual(ownershipLookups, [{ key: file.key, userId: otherUser.id }]);
+    assert.equal(downloadCalls.length, 0);
+    assert.ok(objects.has(file.key));
+
+    const allowed = await fetch(`${baseUrl}/api/files/${file.key}/download`, { headers: { Cookie: cookie } });
+    assert.equal(allowed.status, 200);
+    assert.deepEqual(await allowed.json(), { url: `https://storage.example/downloaded/${file.key}?signature=test`, expiresIn: 60 });
+    assert.deepEqual(downloadCalls, [file.key]);
+});
+
+test("unknown keys and legacy objects without metadata return the same 404 without storage access", async () => {
+    const legacyKey = `${randomUUID()}.pdf`;
+    objects.set(legacyKey, pdf);
+    for (const key of [legacyKey, `${randomUUID()}.pdf`, "not-a-file-key"]) {
+        const response = await fetch(`${baseUrl}/api/files/${key}/download`, { headers: { Cookie: cookie } });
+        assert.equal(response.status, 404);
+        assert.deepEqual(await response.json(), { error: "File not found" });
+    }
+    assert.equal(downloadCalls.length, 0);
+    assert.ok(objects.has(legacyKey));
+});
+
+test("anonymous download requests do not query ownership or access storage", async () => {
+    const uploaded = await upload(multipart());
+    const file = await uploaded.json();
+    const response = await fetch(`${baseUrl}/api/files/${file.key}/download`);
+    assert.equal(response.status, 401);
+    assert.equal(ownershipLookups.length, 0);
+    assert.equal(downloadCalls.length, 0);
+    assert.ok(objects.has(file.key));
+});
+
+test("ownership lookup failures deny download without touching the object", async () => {
+    const uploaded = await upload(multipart());
+    const file = await uploaded.json();
+    failOwnershipLookup = true;
+    const response = await fetch(`${baseUrl}/api/files/${file.key}/download`, { headers: { Cookie: cookie } });
+    assert.equal(response.status, 500);
+    assert.deepEqual(await response.json(), { error: "Failed to prepare download" });
+    assert.equal(downloadCalls.length, 0);
+    assert.ok(objects.has(file.key));
+});
+
+test("an owned file that is no longer in storage returns 404 and retains its metadata", async () => {
+    const uploaded = await upload(multipart());
+    const file = await uploaded.json();
+    const url = `${baseUrl}/api/files/${file.key}/download`;
+    assert.equal((await fetch(url, { headers: { Cookie: cookie } })).status, 200);
+    const repeated = await fetch(url, { headers: { Cookie: cookie } });
+    assert.equal(repeated.status, 404);
+    assert.deepEqual(await repeated.json(), { error: "File not found" });
+    assert.equal(records.length, 1);
+});
+
+test("storage failures after an ownership check retain the safe storage error response", async () => {
+    const uploaded = await upload(multipart());
+    const file = await uploaded.json();
+    downloadError = new UserFacingError("File storage is unreachable, try again shortly", 503);
+    const response = await fetch(`${baseUrl}/api/files/${file.key}/download`, { headers: { Cookie: cookie } });
+    assert.equal(response.status, 503);
+    assert.deepEqual(await response.json(), { error: "File storage is unreachable, try again shortly" });
+    assert.deepEqual(downloadCalls, [file.key]);
+    assert.ok(objects.has(file.key));
 });

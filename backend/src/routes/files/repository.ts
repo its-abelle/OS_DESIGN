@@ -15,6 +15,7 @@ export interface FileRecord extends NewFile {
 
 export interface FileRepository {
     create(file: NewFile): Promise<FileRecord>;
+    isOwnedBy(key: string, userId: number): Promise<boolean>;
 }
 
 export function createFileRepository(pool: pg.Pool): FileRepository {
@@ -27,6 +28,13 @@ export function createFileRepository(pool: pg.Pool): FileRepository {
             );
             const row = result.rows[0]!;
             return { ...file, id: row.id, createdAt: row.created_at };
+        },
+        async isOwnedBy(key, userId) {
+            const result = await pool.query(
+                "SELECT 1 FROM files WHERE s3_key = $1 AND uploaded_by = $2",
+                [key, userId],
+            );
+            return result.rows.length > 0;
         },
     };
 }
