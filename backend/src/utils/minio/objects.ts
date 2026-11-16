@@ -72,6 +72,16 @@ export async function uploadPdf(buffer: Buffer) {
     return key;
 }
 
+// Roll back an uploaded object when its database metadata cannot be saved.
+export async function deleteUploadedPdf(key: string) {
+    if (!KEY_PATTERN.test(key)) throw new UserFacingError("Invalid file key");
+    try {
+        await storageClient.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: key }));
+    } catch (error) {
+        throw toUserFacing(error);
+    }
+}
+
 // Moves the file out of the live area, then signs a short-lived URL for the moved copy.
 // deleteDownloadedFiles removes it once the URL has expired.
 export async function getDownloadUrl(key: string) {

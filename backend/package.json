@@ -12,6 +12,7 @@
         "start": "node src/index.ts",
         "test": "node --env-file=../.env --test test/*.test.ts",
         "test:auth": "node --test test/auth.test.ts",
+        "test:files": "node --test test/files.test.ts",
         "typecheck": "tsc"
     },
     "dependencies": {

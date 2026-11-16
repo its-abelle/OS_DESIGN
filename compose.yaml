@@ -8,7 +8,7 @@ services:
     ports: ["9100:9000", "9101:9001"]   # host 9000/9001 taken by another project; 9100 must be browser-reachable
     volumes: [minio_data:/data]
 
-  database:   # Stores accounts and sessions; file metadata integration comes next
+  database:   # Stores accounts, sessions and uploaded file metadata
     image: postgres:17-alpine
     environment:
       POSTGRES_USER: ${POSTGRES_USER}

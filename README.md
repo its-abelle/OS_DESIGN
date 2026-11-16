@@ -8,7 +8,7 @@ A university practical: a small web app, run entirely in Docker, where users reg
 |------|-------|
 | S3 storage (upload, presigned download, cleanup) | **Working, tested** |
 | Express API routes for files | Session-protected uploads and download URL requests; file ownership checks pending |
-| PostgreSQL (`users`, `files`, `session`) | Accounts and sessions wired; file records not wired yet |
+| PostgreSQL (`users`, `files`, `session`) | Accounts, sessions and new upload metadata wired |
 | Registration, login, logout, sessions (bcrypt, express-session) | Route tests and type checking pass on Node 24; PostgreSQL storage and session persistence verified through Nginx |
 | Web servers (Nginx + Apache) | Configuration checks and page/API routing verified in Docker |
 | Frontend (HTML/CSS/JS) | Stub: placeholder page served by Apache |
@@ -59,12 +59,13 @@ Storage failures come back as human messages: 404 file not found, 502 bad creden
     │   ├── app.ts            # app factory, JSON parsing, sessions, auth and errors
     │   ├── index.ts          # database checks, bucket check, file routes, cleanup
     │   ├── routes/auth/      # registration/login/logout/me and user repository
-    │   ├── routes/files/     # index.ts (router), post.ts (addFile), download.ts (downloadFile)
+    │   ├── routes/files/     # router, upload handler factory and download handler
+    │   │                     # repository.ts persists upload metadata
     │   └── utils/
     │       ├── database.ts   # shared PostgreSQL connection pool
     │       ├── minio/        # client.ts (S3 clients + config), objects.ts (upload, download, cleanup)
     │       └── server/       # sessions, errors and file-route authentication
-    └── test/                 # auth.test.ts and minio.test.ts
+    └── test/                 # auth.test.ts, files.test.ts and minio.test.ts
 ```
 
 TypeScript runs directly on Node 24+ (type stripping), with no build step.
@@ -86,6 +87,7 @@ npm ci
 npm test                           # auth route tests and storage tests against MinIO
 npm run typecheck
 npm run test:auth                  # auth route tests; no MinIO or database required
+npm run test:files                 # upload metadata/rollback tests; no services required
 ```
 
 MinIO console: http://localhost:9101 (log in with `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` from `.env`). Host ports 9100/9101 are used because 9000/9001 are commonly taken.
@@ -134,12 +136,12 @@ All `/api/files` endpoints require a signed session cookie for an existing user.
 Anonymous, invalid, expired and logged-out sessions return `401` before multipart
 parsing or storage access. Sessions for deleted accounts are destroyed and rejected.
 Database lookup failures return `500` without granting access. The middleware
-attaches the current account to `req.user` for later metadata/ownership integration.
+attaches the current account to `req.user` for upload attribution and later ownership checks.
 The guard covers the whole file namespace so new file endpoints inherit protection.
 Registration and login remain public; `/api/auth/me` checks its own session.
 
-File metadata persistence, ownership checks, file listing and the frontend are
-still pending. An authenticated user who knows another file's key can still
+File ownership checks, file listing and the frontend are still pending.
+An authenticated user who knows another file's key can still
 request its download URL until ownership checks are implemented. Presigned URLs
 are temporary bearer links: once issued, storage accepts them until expiry even
 if the application session is logged out.
@@ -155,6 +157,35 @@ expired/logout/deleted-account session rejection, and that an unauthorized downl
 request does not consume the stored file. Temporary verification files were removed.
 Automated PostgreSQL integration
 regression tests remain to be added.
+
+## File metadata
+
+`POST /api/files` accepts a PDF in the multipart `file` field. After storing the
+PDF, the backend inserts its original filename, UUID storage key, validated PDF
+type, actual byte count and authenticated uploader ID into PostgreSQL's `files`
+table. PostgreSQL supplies the record ID and upload timestamp. Client-supplied
+uploader IDs, sizes and MIME fields do not override this metadata.
+
+The `201` response retains the existing `key`, `originalFilename` and `sizeBytes`
+fields and adds `id`, `mimeType`, `uploadedBy` and `createdAt` (an ISO timestamp).
+Success is returned only after both the object upload and metadata insert complete.
+If metadata insertion fails, the backend attempts to delete the uploaded object
+and returns an error. If that cleanup also fails, the object key is logged for
+recovery. This is best-effort compensation, not a transaction across S3 and
+PostgreSQL; crashes or uncertain network outcomes can still require reconciliation.
+
+The existing `files` schema already supports these records, so this step does not
+require resetting database volumes. Metadata applies to new uploads; older stored
+objects are not backfilled because their owners are unknown. Upload metadata is
+retained when downloads move/delete the PDF, so it records upload history rather
+than guaranteeing that the object is still available. File listing and download
+state tracking will need to account for that lifecycle.
+
+Manual checks through Nginx verified that response metadata matches PostgreSQL,
+client-supplied uploader/size fields are ignored, metadata survives a backend
+restart, and the uploaded PDF can still be downloaded. Temporary verification
+rows and storage objects were removed. Automated tests cover metadata insertion,
+input rejection, storage errors, insert rollback and cleanup failure handling.
 
 ## Switching to Amazon S3
 
