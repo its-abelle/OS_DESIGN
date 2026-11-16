@@ -39,8 +39,12 @@ export async function ensureBucket(attempts = 20) {
             return;
         } catch (error: any) {
             if (error?.name === "NotFound") {
-                await storageClient.send(new CreateBucketCommand({ Bucket: BUCKET }));
-                return;
+                try {
+                    await storageClient.send(new CreateBucketCommand({ Bucket: BUCKET }));
+                    return;
+                } catch (createError) {
+                    error = createError; // Retry, the next HEAD rechecks whether it exists now
+                }
             }
             if (attempt >= attempts) throw error;
             await new Promise((resolve) => setTimeout(resolve, 1000));
