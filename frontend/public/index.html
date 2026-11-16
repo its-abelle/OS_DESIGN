@@ -1,1 +1,410 @@
-<h1>stub</h1>
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#183524" />
+    <meta
+      name="description"
+      content="An unnecessarily official PDF cupboard. A Docker, Nginx, Apache and PostgreSQL practical."
+    />
+    <title>Department of Files — Please file responsibly.</title>
+    <link rel="icon" href="/assets/file-pdf.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/styles.css" />
+    <script type="module" src="/app.js"></script>
+  </head>
+  <body data-authenticated="false">
+    <a class="skip-link" href="#main">Skip to the file office</a>
+    <header class="masthead wrap">
+      <a class="brand" href="/" aria-label="Department of Files home"
+        ><span class="brand-mark" aria-hidden="true"
+          ><img src="/assets/file-pdf.svg" alt="" /></span
+        ><span
+          >DEPARTMENT<br />OF FILES<span class="brand-caption"
+            >A very small university practical.</span
+          ></span
+        ></a
+      >
+      <div class="session-controls" id="session-controls" hidden>
+        <span class="user-label"
+          ><i class="square-dot" aria-hidden="true"></i
+          ><span id="user-name"></span></span
+        ><button class="button button-outline" id="logout" type="button">
+          <img src="/assets/sign-out.svg" alt="" />Sign out
+        </button>
+      </div>
+      <span class="office-note" id="office-note"
+        >NO PRINTING REQUIRED.<br />THE TREES SEND THEIR REGARDS.</span
+      >
+    </header>
+    <main id="main" class="wrap" tabindex="-1">
+      <section
+        id="auth-view"
+        class="entrance"
+        aria-labelledby="welcome-heading"
+      >
+        <div class="welcome-copy">
+          <p class="section-label">THE INTERNET’S LEAST INTIMIDATING OFFICE</p>
+          <h1 id="welcome-heading">
+            YOUR PDFs.<br />OUR VERY<br /><em>SERIOUS</em> BUSINESS.
+          </h1>
+          <p class="intro">
+            A little place to file your PDFs, collect them later, and prove that
+            your Docker containers are doing actual work.
+          </p>
+          <div class="clerk-scene" aria-hidden="true">
+            <div class="paper-clerk welcome-clerk">
+              <i class="fold"></i><i class="eyes"></i><i class="mouth"></i
+              ><span>PDF</span>
+            </div>
+            <div class="speech-note">I have a desk job.</div>
+            <span class="rubber-stamp">PLEASE FILE<br />RESPONSIBLY.</span>
+          </div>
+        </div>
+        <section class="auth-panel" aria-labelledby="auth-heading">
+          <div class="panel-tab">VISITOR SERVICES</div>
+          <div class="auth-inner">
+          <div class="mode-switch" role="group" aria-label="Account action">
+              <button type="button" id="login-mode" aria-pressed="true">
+                Sign in</button
+              ><button type="button" id="register-mode" aria-pressed="false">
+                Create account
+              </button>
+            </div>
+            <h2 id="auth-heading">BACK FOR YOUR FILES?</h2>
+            <p id="auth-description" class="muted">
+              Good. We were starting to get attached.
+            </p>
+            <form id="auth-form">
+              <div id="username-field" hidden>
+                <label for="username">Username</label
+                ><input
+                  id="username"
+                  name="username"
+                  autocomplete="username"
+                  minlength="3"
+                  maxlength="50"
+                  pattern="[a-zA-Z0-9_\-]{3,50}"
+                  placeholder="the_file_person"
+                  disabled
+                /><small>3–50 letters, numbers, underscores or hyphens.</small>
+              </div>
+              <div>
+                <label for="email">Email address</label
+                ><input
+                  id="email"
+                  name="email"
+                  type="email"
+                  autocomplete="email"
+                  maxlength="254"
+                  placeholder="you@university.ac.ke"
+                  required
+                />
+              </div>
+              <div>
+                <label for="password">Password</label>
+                <div class="password-field">
+                  <input
+                    id="password"
+                    name="password"
+                    type="password"
+                    autocomplete="current-password"
+                    minlength="8"
+                    placeholder="At least 8 characters"
+                    required
+                  /><button
+                    id="show-password"
+                    type="button"
+                    aria-label="Show password"
+                    aria-pressed="false"
+                  >
+                    <img src="/assets/eye.svg" alt="" />
+                  </button>
+                </div>
+              </div>
+              <p class="form-error" id="auth-error" role="alert" hidden></p>
+              <button
+                class="button button-primary auth-submit"
+                id="auth-submit"
+                type="submit"
+                disabled
+              >
+                <span id="auth-submit-label">Checking session…</span
+                ><img src="/assets/arrow-right.svg" alt="" />
+              </button>
+            </form>
+            <button class="text-button" id="session-retry" type="button" hidden>
+              Retry connection
+            </button>
+            <p class="auth-footnote">
+              <img src="/assets/lock-simple.svg" alt="" />Your account. Your
+              files. No communal cupboard.
+            </p>
+          </div>
+        </section>
+      </section>
+      <section id="workspace" aria-labelledby="workspace-heading" hidden>
+        <div class="workspace-heading">
+          <div>
+            <p class="section-label" id="greeting">YOUR PERSONAL FILE OFFICE</p>
+            <h1 id="workspace-heading">LET’S FILE SOMETHING.</h1>
+            <p>
+              A home for PDFs. An excuse to say “it works on my containers.”
+            </p>
+          </div>
+          <div
+            class="paper-clerk desk-clerk"
+            id="desk-clerk"
+            aria-hidden="true"
+          >
+            <i class="fold"></i><i class="eyes"></i><i class="mouth"></i
+            ><span>EMPLOYEE<br />OF THE BYTE</span>
+          </div>
+        </div>
+        <div class="notice" id="notice" role="status" aria-live="polite" hidden>
+          <span id="notice-text"></span
+          ><button
+            type="button"
+            id="dismiss-notice"
+            aria-label="Dismiss message"
+          >
+            ×
+          </button>
+        </div>
+        <div class="desk-layout">
+          <section class="upload-panel" aria-labelledby="upload-heading">
+            <div class="panel-tab">INCOMING PAPERWORK</div>
+            <div class="upload-inner">
+              <h2 id="upload-heading">FILE IT HERE.</h2>
+              <p class="muted">
+                One PDF at a time. We’re an office, not a miracle.
+              </p>
+              <form id="upload-form">
+                <label class="drop-zone" id="drop-zone" for="file-input"
+                  ><input
+                    id="file-input"
+                    name="file"
+                    type="file"
+                    accept=".pdf,application/pdf"
+                    class="visually-hidden"
+                  /><span class="upload-symbol"
+                    ><img src="/assets/upload-simple.svg" alt="" /></span
+                  ><strong>Drop a PDF here</strong
+                  ><span>or click to choose one</span
+                  ><small id="upload-limit"
+                    >PDF only · up to 10 MB</small
+                  ></label
+                >
+                <div class="selected-file" id="selected-file" hidden>
+                  <img src="/assets/file-pdf.svg" alt="" /><span
+                    id="selected-name"
+                  ></span
+                  ><button
+                    type="button"
+                    id="clear-file"
+                    aria-label="Remove selected file"
+                  >
+                    ×
+                  </button>
+                </div>
+                <button
+                  class="button button-primary upload-submit"
+                  id="upload-submit"
+                  type="submit"
+                  disabled
+                >
+                  <span id="upload-submit-label">File this PDF</span
+                  ><img src="/assets/arrow-right.svg" alt="" />
+                </button>
+                <p
+                  class="upload-status"
+                  id="upload-status"
+                  role="status"
+                  aria-live="polite"
+                >
+                  No file selected. The clerk is on standby.
+                </p>
+              </form>
+              <div class="office-rule">
+                <span class="rule-number">!</span>
+                <p>
+                  <strong>A small office rule</strong>Collecting a PDF removes
+                  it from the drawer. Its database receipt stays. Issued
+                  download links work for 60 seconds.
+                </p>
+              </div>
+            </div>
+          </section>
+          <section class="files-panel" aria-labelledby="files-heading">
+            <div class="files-heading">
+              <div>
+                <h2 id="files-heading">YOUR FILE DRAWER</h2>
+                <p id="record-count" class="muted">Opening the drawer…</p>
+              </div>
+              <button class="button button-small" id="refresh" type="button">
+                <img src="/assets/arrows-clockwise.svg" alt="" /><span
+                  >Refresh</span
+                >
+              </button>
+            </div>
+            <p class="list-error" id="list-error" role="alert" hidden></p>
+            <div class="list-loading" id="list-loading" role="status">
+              <span>Checking the filing cabinet…</span><i></i><i></i><i></i>
+            </div>
+            <div class="empty-state" id="empty-state" hidden>
+              <span class="empty-icon"
+                ><img src="/assets/tray.svg" alt=""
+              /></span>
+              <h3>NOTHING TO MISPLACE. YET.</h3>
+              <p>
+                Your drawer is empty. Give the clerk a PDF<br />and a renewed
+                sense of purpose.
+              </p>
+              <button class="text-button" type="button" id="empty-choose">
+                Choose your first PDF →
+              </button>
+            </div>
+            <ul
+              class="file-list"
+              id="file-list"
+              aria-label="Your uploaded files"
+            ></ul>
+            <button
+              class="button load-more"
+              id="load-more"
+              type="button"
+              hidden
+            >
+              Open the next drawer →
+            </button>
+            <div class="drawer-note">
+              <img src="/assets/database.svg" alt="" />
+              <p>
+                These records live in <strong>PostgreSQL</strong>.<br />The
+                actual PDFs live in <strong>MinIO</strong>. Different desks.
+                Same office.
+              </p>
+            </div>
+          </section>
+        </div>
+      </section>
+      <details class="stack-map" id="stack-map">
+        <summary>
+          <span
+            ><img src="/assets/cube.svg" alt="" />FOR THE LECTURER: FOLLOW A
+            FILE</span
+          ><span class="summary-action"
+            >Under the hood <span aria-hidden="true">+</span></span
+          >
+        </summary>
+        <div class="stack-content">
+          <p class="stack-intro">
+            Five containers. One very well-travelled PDF. Here’s what each one
+            actually does.
+          </p>
+          <ol class="stack-steps">
+            <li>
+              <span class="stack-number">01</span>
+              <div>
+                <strong>Nginx</strong>
+                <p>
+                  The front desk. Receives browser requests on port 8080 and
+                  directs traffic.
+                </p>
+              </div>
+            </li>
+            <li>
+              <span class="stack-number">02</span>
+              <div>
+                <strong>Apache</strong>
+                <p>
+                  Serves this HTML, CSS and JavaScript. Yes, both web servers
+                  have jobs.
+                </p>
+              </div>
+            </li>
+            <li>
+              <span class="stack-number">03</span>
+              <div>
+                <strong>Express</strong>
+                <p>
+                  Checks sessions and ownership, validates PDFs, and handles API
+                  requests.
+                </p>
+              </div>
+            </li>
+            <li>
+              <span class="stack-number">04</span>
+              <div>
+                <strong>PostgreSQL</strong>
+                <p>
+                  Keeps users, sessions and file records: name, size, owner, key
+                  and timestamp.
+                </p>
+              </div>
+            </li>
+            <li>
+              <span class="stack-number">05</span>
+              <div>
+                <strong>MinIO</strong>
+                <p>
+                  Keeps the PDF bytes. Sends them back using a short-lived
+                  signed URL.
+                </p>
+              </div>
+            </li>
+          </ol>
+          <p class="stack-footnote">
+            Docker Compose brings the office together. Named volumes keep
+            PostgreSQL and MinIO data across container restarts. Uploads go
+            Browser → Nginx → Express → PostgreSQL + MinIO; downloads go
+            directly from MinIO using the authorised link.
+          </p>
+        </div>
+      </details>
+    </main>
+    <footer class="footer wrap">
+      <span
+        >DEPARTMENT OF FILES <span aria-hidden="true">/</span> A UNIVERSITY
+        PRACTICAL</span
+      ><span>PostgreSQL has the receipts.</span>
+    </footer>
+    <noscript
+      ><p class="noscript">
+        Enable JavaScript to sign in, file PDFs and view your drawer.
+      </p></noscript
+    >
+    <template id="file-template"
+      ><li class="file-row">
+        <span class="file-symbol"
+          ><img src="/assets/file-pdf.svg" alt=""
+        /></span>
+        <div class="file-detail">
+          <h3 class="file-name"></h3>
+          <p class="file-meta"></p>
+          <details class="receipt">
+            <summary>Database receipt</summary>
+            <dl>
+              <dt>Record ID</dt>
+              <dd class="receipt-id"></dd>
+              <dt>Uploader ID</dt>
+              <dd class="receipt-owner"></dd>
+              <dt>MIME type</dt>
+              <dd>application/pdf</dd>
+              <dt>Storage key</dt>
+              <dd class="receipt-key"></dd>
+            </dl>
+          </details>
+        </div>
+        <div class="file-action">
+          <span class="availability"></span
+          ><button class="button button-collect" type="button">
+            <img src="/assets/download-simple.svg" alt="" /><span
+              >Collect PDF</span
+            ></button
+          ><a class="retry-download" hidden>Retry issued link ↗</a>
+        </div>
+      </li></template
+    >
+  </body>
+</html>

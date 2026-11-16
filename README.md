@@ -7,11 +7,11 @@ A university practical: a small web app, run entirely in Docker, where users reg
 | Part | State |
 |------|-------|
 | S3 storage (upload, presigned download, cleanup) | **Working, tested** |
-| Express API routes for files | Session-protected uploads and owner-only download URL requests |
+| Express API routes for files | Session-protected uploads, paginated own-file listing and owner-only download URL requests |
 | PostgreSQL (`users`, `files`, `session`) | Accounts, sessions and new upload metadata wired |
 | Registration, login, logout, sessions (bcrypt, express-session) | Route tests and type checking pass on Node 24; PostgreSQL storage and session persistence verified through Nginx |
 | Web servers (Nginx + Apache) | Configuration checks and page/API routing verified in Docker |
-| Frontend (HTML/CSS/JS) | Stub: placeholder page served by Apache |
+| Frontend (HTML/CSS/JS) | Working account forms, PDF upload, private file drawer, receipts and downloads; served by Apache |
 
 ## Architecture
 
@@ -49,7 +49,7 @@ Storage failures come back as human messages: 404 file not found, 502 bad creden
 ├── .nvmrc                    # Node 24 for local development
 ├── db/init.sql               # PostgreSQL account, file and session schema
 ├── frontend/
-│   ├── public/               # HTML/CSS/JS mounted into Apache (currently a stub)
+│   ├── public/               # HTML/CSS/JS and self-hosted fonts/icons mounted into Apache
 │   ├── templates/            # Nginx reverse-proxy configuration
 │   └── 15-upload-limit.envsh # Derives Nginx body limit from MAX_UPLOAD_MB
 └── backend/
@@ -59,7 +59,7 @@ Storage failures come back as human messages: 404 file not found, 502 bad creden
     │   ├── app.ts            # app factory, JSON parsing, sessions, auth and errors
     │   ├── index.ts          # database checks, bucket check, file routes, cleanup
     │   ├── routes/auth/      # registration/login/logout/me and user repository
-    │   ├── routes/files/     # router, upload handler factory and download handler
+    │   ├── routes/files/     # router, upload/list/download handlers
     │   │                     # repository.ts persists metadata and checks ownership
     │   └── utils/
     │       ├── database.ts   # shared PostgreSQL connection pool
@@ -84,10 +84,10 @@ nvm use                           # if using nvm; otherwise activate Node 24+
 docker compose up -d minio         # S3 only; `docker compose up --build -d` for everything
 cd backend
 npm ci
-npm test                           # auth route tests and storage tests against MinIO
+npm test                           # auth, metadata, ownership, listing and MinIO tests
 npm run typecheck
 npm run test:auth                  # auth route tests; no MinIO or database required
-npm run test:files                 # metadata, rollback and ownership tests; no services required
+npm run test:files                 # metadata, rollback, ownership and listing; no services required
 ```
 
 MinIO console: http://localhost:9101 (log in with `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` from `.env`). Host ports 9100/9101 are used because 9000/9001 are commonly taken.
@@ -140,12 +140,55 @@ attaches the current account to `req.user` for upload attribution and ownership 
 The guard covers the whole file namespace so new file endpoints inherit protection.
 Registration and login remain public; `/api/auth/me` checks its own session.
 
-File listing and the frontend are still pending. Download URL requests are scoped
+Download URL requests are scoped
 to the logged-in user's ID and the file's storage key using a parameterized query.
 Other users' files and missing metadata both return `404` with `File not found`.
 Database ownership lookup failures return `500` without accessing storage. Presigned URLs
 are temporary bearer links: once issued, storage accepts them until expiry even
 if the application session is logged out.
+
+## Frontend and classroom demonstration
+
+Open **http://localhost:8080** after `docker compose up --build -d`. The Department
+of Files is a deliberately small, humorous interface with deep forest colours,
+square controls, Barlow Condensed headings and IBM Plex Sans body text. Fonts and
+Phosphor icons are served locally, with their licenses in `frontend/public/assets/`;
+there is no frontend build step or CDN dependency.
+
+Create an account or sign in, choose/drop a PDF, and select **File this PDF**.
+The drawer shows only the signed-in user's records. Expand **Database receipt**
+to inspect its record ID, uploader ID and storage key. **Collect PDF** requests an
+owner-authorized link and triggers a browser download; **Retry issued link** remains
+available for the link's lifetime. Collected/missing PDFs are marked unavailable
+after storage checks while their PostgreSQL receipts remain visible.
+
+Expand **For the lecturer: follow a file** to explain Docker Compose, Nginx,
+Apache, Express, PostgreSQL and MinIO. PostgreSQL stores account/session/file
+records, while MinIO stores PDF bytes. PostgreSQL is the relational database chosen
+for this practical in place of MySQL.
+
+Forms include loading/errors, session-expiry recovery, keyboard support and
+reduced-motion alternatives. User-controlled names are rendered with `textContent`.
+Browser checks verified registration, sign-in recovery, uploads, real downloads,
+receipt inspection, private listing, pagination, refresh, expired sessions and
+storage-error recovery. Layouts were checked at 320, 375, 768 and 1200 pixels;
+automated WCAG A/AA checks found no violations in the sign-in and populated drawer.
+Temporary browser test records and PDFs were removed afterward.
+
+## File listing API
+
+`GET /api/files?limit=20&before=<record-id>` returns `{ files, nextCursor,
+maxUploadBytes }`. `limit` defaults to 20 and accepts integers from 1 to 20;
+`before` is an optional positive integer record ID. Records are ordered by ID
+descending. Pass `nextCursor` as `before` to fetch the next page; `null` means the
+last page. The uploader filter always comes from the session, not query parameters.
+
+Each entry contains the upload metadata plus `available`, checked with an S3 HEAD
+request against that caller's original object key. At most one page of keys is
+checked; listing does not enumerate the bucket or consume files. Availability is a
+snapshot and is rechecked on Refresh. Database and storage failures return safe
+errors rather than silently presenting a partial page as complete. The frontend
+uses `maxUploadBytes` to display and validate the configured upload limit.
 
 Authentication and route-protection tests use an isolated
 in-memory repository/session store. Manual Docker integration checks verified
@@ -181,8 +224,9 @@ objects are not backfilled because their owners are unknown. Upload metadata is
 required for downloads, so older objects without metadata cannot receive new
 download URLs; upload them again under the correct account. Upload metadata is
 retained when downloads move/delete the PDF, so it records upload history rather
-than guaranteeing that the object is still available. File listing and download
-state tracking will need to account for that lifecycle.
+than guaranteeing that the object is still available. Listing checks original
+object availability on each refresh; a missing object may have been collected or
+removed outside the application.
 
 Manual checks through Nginx verified that response metadata matches PostgreSQL,
 client-supplied uploader/size fields are ignored, metadata survives a backend
