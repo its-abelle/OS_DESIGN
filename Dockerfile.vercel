@@ -1,0 +1,21 @@
+# The Compose classroom stack remains separate. This image keeps all three HTTP
+# servers together; PostgreSQL and S3-compatible storage are managed externally.
+FROM node:24-alpine
+RUN apk add --no-cache nginx apache2 gettext-envsubst su-exec
+
+WORKDIR /app/backend
+COPY backend/package*.json ./
+RUN npm ci --omit=dev
+COPY backend/src ./src
+COPY backend/scripts ./scripts
+COPY db/init.sql /app/db/init.sql
+COPY frontend/public /var/www/localhost/htdocs
+COPY deploy/vercel/nginx.conf.template /deploy/nginx.conf.template
+COPY deploy/vercel/httpd.conf /etc/apache2/httpd.conf
+COPY deploy/vercel/start.sh deploy/vercel/start-nginx.sh deploy/vercel/wait-ready.mjs /deploy/
+RUN chmod +x /deploy/start.sh /deploy/start-nginx.sh \
+    && mkdir -p /run/nginx /run/apache2
+
+ENV NODE_ENV=production DEPLOYMENT_TARGET=vercel
+EXPOSE 80
+CMD ["/deploy/start.sh"]

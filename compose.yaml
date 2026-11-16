@@ -33,7 +33,7 @@ services:
     volumes:
       - ./frontend/public:/usr/local/apache2/htdocs:ro
 
-  frontend:   # Nginx entry point; the UI is still a placeholder
+  frontend:   # Nginx entry point; Apache serves the UI
     image: nginx:stable-alpine
     ports: ["8080:80"]
     environment: { MAX_UPLOAD_MB: "${MAX_UPLOAD_MB:-10}" }   # same value the backend enforces

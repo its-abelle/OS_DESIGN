@@ -13,6 +13,7 @@
         "test": "node --env-file=../.env --test test/*.test.ts",
         "test:auth": "node --test test/auth.test.ts",
         "test:files": "node --test test/files.test.ts",
+        "db:init": "node scripts/init-database.ts",
         "typecheck": "tsc"
     },
     "dependencies": {

@@ -15,6 +15,11 @@ A university practical: a small web app, run entirely in Docker, where users reg
 
 ## Architecture
 
+For the hosted deployment, see [Vercel setup](deploy/vercel/README.md). The
+repository-root `Dockerfile.vercel` packages Nginx, Apache and Express in one
+Vercel container; it connects to managed PostgreSQL and S3-compatible storage.
+The Compose architecture below remains the local classroom demonstration.
+
 ```
 Browser ──:8080──> frontend (Nginx) ──/──────> apache (HTML/CSS/JS)
    │                      │

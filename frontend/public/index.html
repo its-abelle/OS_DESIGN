@@ -299,8 +299,8 @@
         </summary>
         <div class="stack-content">
           <p class="stack-intro">
-            Five containers. One very well-travelled PDF. Here’s what each one
-            actually does.
+            Classroom setup: five containers. One very well-travelled PDF.
+            Here’s what each one actually does.
           </p>
           <ol class="stack-steps">
             <li>
@@ -359,6 +359,8 @@
             PostgreSQL and MinIO data across container restarts. Uploads go
             Browser → Nginx → Express → PostgreSQL + MinIO; downloads go
             directly from MinIO using the authorised link.
+            The Vercel version combines Nginx, Apache and Express in one container
+            and connects to hosted PostgreSQL and object storage.
           </p>
         </div>
       </details>

@@ -8,6 +8,9 @@ import { requireAuth } from "#utils/server/auth.ts";
 
 export function createApp(users: UserRepository, store: session.Store, secret: string) {
     const app = express();
+    // The Vercel image's Nginx is the only HTTP peer of Express, over loopback.
+    // Docker Compose keeps its existing trust settings.
+    if (process.env.DEPLOYMENT_TARGET === "vercel") app.set("trust proxy", "loopback");
     app.disable("x-powered-by");
     app.use(express.json({ limit: "16kb" }));
     app.use(createSessionMiddleware(store, secret));

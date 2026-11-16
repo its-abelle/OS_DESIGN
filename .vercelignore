@@ -1,0 +1,6 @@
+.git
+.serena
+.env
+.env.*
+**/node_modules
+*.log

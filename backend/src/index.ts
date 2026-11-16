@@ -18,6 +18,8 @@ await pool.query("SELECT id FROM users LIMIT 0");
 await pool.query('SELECT sid FROM "session" LIMIT 0');
 await pool.query("SELECT id FROM files LIMIT 0");
 await ensureBucket();
+// Container instances may have been asleep when older download URLs expired.
+deleteDownloadedFiles().catch((error) => console.error("Startup Download Cleanup Error:", error));
 
 // 2. Sweep downloaded files whose URLs have expired
 setInterval(() => {
