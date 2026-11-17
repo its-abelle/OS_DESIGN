@@ -15,7 +15,7 @@ Students demonstrating a university practical and the lecturer assessing it.
 ## Product Purpose
 
 A small working demonstration of registration, authentication, PDF storage and
-retrieval using Docker, Nginx, Apache, Express, PostgreSQL and S3-compatible MinIO.
+retrieval using Docker, Nginx, Apache/PHP, MySQL and S3-compatible MinIO.
 Users should be able to explain where account/file records and PDF bytes live.
 
 ## Brand Personality
