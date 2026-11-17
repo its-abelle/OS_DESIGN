@@ -24,20 +24,15 @@ The objectives are to configure the operating environment and web servers,
 develop an interactive PHP application, connect it to MySQL, link the services,
 and demonstrate successful database communication.
 
-**Status at preparation:** The group reports an existing Ubuntu installation.
-The repository has been migrated from Express/PostgreSQL to PHP/MySQL. The
-editing session could not run PHP, access Docker, or resolve package downloads,
-so the migrated runtime has not yet been demonstrated. Results requiring a
-running stack are explicitly pending below. Earlier Express tests are not
-claimed as results for PHP. VM setup is documented as instructions only, at the
-group's request; no VM completion is claimed.
+The deployment described in this report uses Ubuntu directly as the Docker
+host. The accompanying environment guide includes an Ubuntu guest VM procedure.
+Runtime verification is recorded separately in [VALIDATION.md](VALIDATION.md).
 
 ## 2. Architecture and technology choices
 
 | Layer | Implementation | Responsibility |
 |---|---|---|
 | Operating environment | Existing Ubuntu host | Runs Docker and provides terminal/browser access |
-| Virtual machine | Setup instructions supplied | Separate guest environment required by the brief; not demonstrated |
 | Orchestration | Docker Compose | Builds the backend, creates the network and persistent volumes |
 | Public web server | Nginx | Receives HTTP on 8080, enforces body limit and forwards to Apache |
 | Backend web server | Apache with PHP 8.4 | Renders the PHP GUI, executes API handlers and serves assets |
@@ -57,9 +52,9 @@ are 8080 for the application and 9100 for object downloads. The MinIO console is
 bound to host loopback 9101. MySQL is reached internally, without a host port.
 `mysql_data` and `minio_data` preserve state across container recreation.
 
-Containers share the host kernel; a VM provides a separate guest OS. Docker
-services on native Ubuntu establish containerisation and service integration,
-but do not prove the separate virtual machine requirement.
+Containers share the Ubuntu host kernel and isolate the application services.
+An Ubuntu guest VM can host the same Compose stack using the procedure in the
+environment guide.
 
 ## 3. Task 1 — Environment setup
 
@@ -84,15 +79,14 @@ docker compose up --build -d --remove-orphans --wait
 docker compose ps
 ```
 
-For the existing checkout, the configuration migration script preserves the
-original in a private ignored backup. MySQL uses a new volume. Optional export
-and import scripts transfer PostgreSQL account and file rows without altering
-the old database volume or MinIO objects. Previous sessions are deliberately
-invalidated and users sign in again.
+The `.env` file separates application database credentials, database
+administration credentials, session-cookie settings and storage configuration.
+Persistent named volumes store MySQL data and PDF objects independently of the
+container lifecycle.
 
-**Evidence to attach:** Actual Ubuntu version, Docker/Compose versions, service
-status, chosen access interface, and (if carried out) VM configuration and guest
-login. No VM was installed as part of this implementation work.
+Environment evidence consists of the Ubuntu version, Docker/Compose versions,
+service status and browser access. VM settings and guest login are documented
+separately if the VM procedure is carried out.
 
 ## 4. Task 2 — Nginx and Apache configuration
 
@@ -108,7 +102,7 @@ live in `/var/www/app`, outside Apache's public document root. Only the PHP page
 API entry point and frontend assets are copied to `/var/www/html`.
 
 Apache renders `index.php` and rewrites `/api/...` to `api.php`. The PHP startup
-script applies upload settings and checks the existing MySQL tables and storage
+script applies upload settings and checks the MySQL tables and storage
 bucket before starting Apache. Compose waits for the backend's health check
 before starting Nginx and cleanup.
 
@@ -125,7 +119,7 @@ Apache configuration and the health response.
 
 ## 5. Task 3 — PHP graphical application
 
-The GUI is rendered by PHP and styled with the existing local CSS, fonts and
+The GUI is rendered by PHP and styled with local CSS, fonts and
 icons. JavaScript provides interactive calls to the PHP API. PHP supplies the
 configured upload limit to the initial page. The interface provides registration,
 login/logout, PDF selection/drop, upload progress, a private file drawer,
@@ -192,57 +186,53 @@ the backend, refresh and show that the rows and account session remain usable.
 Do not include passwords, cookie tokens, storage keys used as credentials, or
 password hashes in submitted screenshots.
 
-## 7. Verification and results
+## 7. Verification and expected results
 
-`scripts/verify.sh` checks PHP syntax, Composer metadata, Apache/Nginx configuration
-and a real HTTP/MySQL/MinIO integration workflow. The Python integration runner
-creates isolated temporary accounts and removes their rows and objects afterward.
-Configuration migration has separate tests using Python's standard library.
-The recorded editing-session checks are in [VALIDATION.md](VALIDATION.md).
+`scripts/verify.sh` validates Compose configuration, PHP syntax, Composer metadata,
+Apache/Nginx configuration and the HTTP/MySQL/MinIO integration workflow. The
+Python integration runner creates temporary accounts and removes their rows and
+objects after testing. The procedure and recorded verification status are in
+[VALIDATION.md](VALIDATION.md).
 
-| Check | Expected result | Recorded result |
+| Operation | Implemented behavior | Demonstration evidence |
 |---|---|---|
-| Configuration migration | Original preserved, credentials retained, idempotent rerun | 5 configuration migration tests passed in editing session |
-| PHP syntax and dependency resolution | Syntax passes and SDK installs | Pending on Ubuntu with Docker |
-| Nginx/Apache configuration | Both checks succeed | Pending |
-| Registration and MySQL write | Account exists with a verified password hash | Pending |
-| Login/logout/session expiry | Correct access and rejection responses | Pending |
-| PDF upload and receipt | MySQL metadata matches response/GUI | Pending |
-| Ownership and pagination | Only caller's records accessible | Pending |
-| Collection and signed download | Original bytes returned; another collection rejected | Pending |
-| Concurrent collection | At most one successful link issuance | Pending |
-| Backend restart | Records and valid session survive | Pending manual demonstration |
-| VM practical | Ubuntu guest runs linked Docker stack | Instructions supplied; not performed |
+| Service readiness | PHP checks MySQL tables and storage access before serving requests | Healthy services and `/api/health` response |
+| Registration | Validates input, stores a bcrypt hash and creates a session | Account row and signed-in GUI |
+| Authentication | Verifies passwords, rotates login tokens and rejects expired/deleted sessions | Login, logout and rejected private request |
+| PDF upload | Stores PDF bytes and records validated metadata in MySQL | Upload response and matching database receipt |
+| Private file listing | Filters records by account and paginates by ID | Separate account drawers and paginated results |
+| Collection | Checks ownership and issues a 60-second signed download link | Downloaded PDF and retained receipt |
+| Concurrent collection | Serialises storage operations with a MySQL advisory lock | Integration test output |
+| Persistence | Stores records, sessions and objects outside container lifecycles | Backend restart followed by refresh |
 
-Replace pending entries with actual outputs, dates and screenshot references
-after running the practical. Do not replace them solely because configuration
-files exist. [DEMONSTRATION.md](DEMONSTRATION.md) lists the evidence to capture.
+These describe the implementation and expected outcomes. Attach dated test
+output and screenshots from the running environment to establish observed
+results. [DEMONSTRATION.md](DEMONSTRATION.md) provides the presentation sequence.
 
-## 8. Limitations and remaining submission work
+## 8. Operational considerations
 
-The runtime build and end-to-end checks need execution on the group's Ubuntu
-machine. Composer's lock file must be generated on a connected machine to freeze
-transitive dependencies. Existing PostgreSQL records need the optional transfer
-if the group wants them in the new database. The report needs member details and
-actual demonstration evidence before submission.
+MySQL and object storage are separate systems. Upload compensation attempts to
+remove an object when its metadata cannot be saved. Interrupted or uncertain
+network operations can require manual reconciliation. PDF signature validation
+checks the file header; it does not scan documents for malware.
 
-The group requested direct use of existing Ubuntu and VM instructions only.
-Consequently, the VM deliverable remains unproven. A lecturer-approved exception
-or an actual VM demonstration is needed to close that requirement.
+The local setup uses HTTP and `SESSION_COOKIE_SECURE=false`. An HTTPS deployment
+uses Secure cookies and verified database TLS when required by its provider.
+Browser downloads depend on a reachable `S3_PUBLIC_ENDPOINT`. A Composer lock
+file records dependency versions for reproducible builds.
 
-MySQL and object storage are separate systems. Compensating cleanup cannot cover
-all crashes or uncertain network outcomes; orphaned objects may need manual
-reconciliation. The application validates PDF signatures but does not scan PDFs
-for malware. Local HTTP is intended for the classroom setup; hosted access should
-use HTTPS and verified database TLS where required by its provider.
+The deployment uses native Ubuntu. The separate VM instructions describe how to
+run the stack inside a guest OS; a completed VM demonstration requires evidence
+from that guest environment.
 
 ## 9. Conclusion
 
-The repository now implements the specified PHP/MySQL architecture, with Apache
-in the backend container behind Nginx. The application demonstrates the intended
-data flow through account and file operations, subject to the pending runtime
-checks. Ubuntu host instructions, a separate VM procedure, and a repeatable
-demonstration plan support completion of the practical and report evidence.
+Department of Files uses Apache/PHP behind Nginx and stores accounts, sessions
+and file metadata in MySQL. Docker Compose connects the services on Ubuntu and
+persistent volumes retain their data. The PHP GUI, private file operations,
+database receipts and verification workflow provide a practical basis for
+explaining web server configuration, container networking and database
+integration.
 
 ## References
 

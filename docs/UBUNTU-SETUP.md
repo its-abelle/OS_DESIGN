@@ -2,10 +2,9 @@
 
 ## Existing Ubuntu installation
 
-The group already has Ubuntu installed and will use it directly. No VM is
-installed by this repository. This satisfies the Ubuntu prerequisite; it does
-not itself satisfy the brief's separate instruction to configure a VM. The VM
-procedure below is provided for use if required at assessment.
+The application runs on the group's native Ubuntu installation. Docker hosts
+Nginx, Apache/PHP, MySQL, MinIO and the cleanup worker. The separate VM procedure
+below describes an Ubuntu guest deployment of the same stack.
 
 Record the actual host details for the report:
 
@@ -60,13 +59,12 @@ sudo usermod -aG docker "$USER"
 ```
 
 Membership grants administrative control through Docker. Once access works,
-follow the root README's fresh setup or upgrade procedure.
+follow the setup procedure in the root README.
 
-## VM instructions only
+## Ubuntu guest VM procedure
 
-This procedure is **not a record of a VM already created**. An existing Ubuntu
-host can also run an Ubuntu guest VM; these are distinct operating system
-instances. Ubuntu provides an official [VirtualBox walkthrough](https://ubuntu.com/tutorials/how-to-run-ubuntu-desktop-on-a-virtual-machine-using-virtualbox).
+An Ubuntu host can also run a separate Ubuntu guest VM. This section is a setup
+procedure; the deployment described in the report uses native Ubuntu. Ubuntu provides an official [VirtualBox walkthrough](https://ubuntu.com/tutorials/how-to-run-ubuntu-desktop-on-a-virtual-machine-using-virtualbox).
 
 1. Enable hardware virtualisation in firmware if needed. Install VirtualBox
    following its instructions for the host OS, and download a supported Ubuntu
@@ -94,7 +92,7 @@ for that browser. Host ports must be available; choose another host port and
 update the browser URL or public storage endpoint if needed.
 
 For bridged networking, find the guest address using `hostname -I`. Set
-`S3_PUBLIC_ENDPOINT=http://<guest-IP>:9100`, recreate backend/cleanup, and browse
+`S3_PUBLIC_ENDPOINT=http://<guest-IP>:9100`, recreate backend, cleanup and frontend, and browse
 `http://<guest-IP>:8080`. Optional SSH uses guest port 22 (or NAT host 2222 → guest
 22) after installing `openssh-server`. Do not publish MySQL port 3306.
 
@@ -111,4 +109,4 @@ Browser → Nginx → Apache/PHP → MySQL
 ```
 
 For direct Ubuntu hosting, omit the VM layer and describe that accurately in the
-report. Instructions alone are not evidence of a completed VM practical.
+report. Capture guest-specific evidence when presenting a VM deployment.

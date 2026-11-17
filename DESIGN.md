@@ -23,3 +23,15 @@ A CSS paper clerk reacts to selecting, submitting and collecting a PDF. Stamps
 briefly tilt into place after success. No motion delays a task; reduced-motion
 preferences disable animation. Errors stay literal; success and empty states may
 make a small joke. Technical explanations live in an expandable classroom map.
+
+## Implementation
+
+`frontend/public/index.php` renders the interface and its configured upload
+limit. `styles.css` defines the palette, layout, typography and reduced-motion
+rules; `app.js` controls authentication, uploads, the file drawer and issued
+links. Icons and fonts are served from `frontend/public/assets/`.
+
+The drawer presents filenames, sizes, timestamps and availability. Expandable
+receipts expose MySQL record IDs, owner IDs and storage keys for the practical
+presentation. The architecture map explains Nginx, Apache/PHP, MySQL and MinIO
+without interrupting registration or file collection.

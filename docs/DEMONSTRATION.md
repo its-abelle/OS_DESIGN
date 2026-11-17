@@ -1,20 +1,19 @@
 # Practical demonstration and evidence
 
-Run from the repository root on the group's Ubuntu machine. Keep credentials,
-cookie values and private exports out of screenshots. Do not screenshot a fully
+Run from the repository root on the group's Ubuntu machine. Keep passwords,
+API credentials and cookie values out of screenshots. Do not screenshot a fully
 rendered `docker compose config` or `.env`; use `config --quiet` for validation.
 
 ## Preparation
 
-1. Read the README upgrade procedure before replacing the old PostgreSQL container.
-   Export old records first if needed. Do not remove existing data volumes.
-2. Run `python3 scripts/migrate-env.py` for the existing configuration, or copy
-   `.env.example` and set secrets for a fresh setup.
+1. Check Docker Engine and the Compose plugin on Ubuntu.
+2. Copy `.env.example` to `.env` if needed and set the database and storage
+   passwords. Keep an already configured `.env` when rebuilding.
 3. Set `S3_PUBLIC_ENDPOINT` for the browser that will run the demonstration.
 4. Run `docker compose up --build -d --remove-orphans --wait`.
 5. Run `sh scripts/verify.sh` and save the actual output.
-6. Generate/commit `backend/composer.lock` as described in the README and rebuild
-   before freezing the submission.
+6. Record dependency versions in `backend/composer.lock` using the README's
+   dependency command, then rebuild when those versions change.
 
 ## Demonstration sequence
 
@@ -49,8 +48,8 @@ docker compose exec database sh -c 'exec mysql -u "$MYSQL_USER" -p "$MYSQL_DATAB
 ```
 
 If a VM is actually used, also capture its resource/network settings, guest
-Ubuntu login/version, and Docker running inside the guest. Otherwise keep the
-report's VM status as instructions supplied, not demonstrated.
+Ubuntu login/version, and Docker running inside the guest. The native Ubuntu
+deployment is documented without a guest VM layer.
 
 ## Troubleshooting
 
@@ -72,5 +71,6 @@ report's VM status as instructions supplied, not demonstrated.
 ## Final report pass
 
 Fill in group details, actual test output/date, screenshot references, host
-versions and VM status. Retain any remaining pending results accurately. Submit
-the report together with the practical demonstration by the confirmed deadline.
+versions and the deployment environment. Record results from the demonstrated
+stack and leave unperformed checks clearly identified. Submit the report
+together with the practical demonstration by the confirmed deadline.

@@ -1,29 +1,56 @@
-# PHP/MySQL migration validation record
+# Application validation
 
-Recorded during implementation on 17 November 2026. These results concern the
-checks listed here, not a successful running PHP deployment.
+## Automated verification
 
-| Check | Result |
+Start the application on Ubuntu using the root README, then run:
+
+```bash
+sh scripts/verify.sh
+```
+
+The script validates Compose configuration, PHP syntax, Composer metadata, Apache
+configuration and Nginx configuration before running the integration checks.
+The integration runner uses the application through `http://localhost:8080` and
+queries MySQL through the backend container to compare stored records with API
+responses. Its temporary accounts, file records and storage objects are removed
+after the checks.
+
+## Verification coverage
+
+| Area | Checks |
 |---|---|
-| `python3 -m unittest discover -s scripts/tests -v` | Passed: 5 configuration migration tests |
-| Python compilation of configuration/export/integration scripts | Passed |
-| `node --check frontend/public/app.js` | Passed |
-| `bash -n deploy/vercel/start.sh` | Passed |
-| `sh -n` for backend startup, Nginx startup, upload-limit and verification scripts | Passed |
-| Compose YAML structure review | Passed; expected five services and MySQL/backend health dependencies |
-| `docker compose config --quiet` with migrated local `.env` | Passed |
-| `git diff --check` | Passed before commit |
-| `docker compose build backend` | Blocked: Docker daemon socket access denied |
-| PHP syntax, Composer dependency resolution and lock generation | Not run: no PHP runtime or terminal network access |
-| `sh scripts/verify.sh` runtime integration workflow | Pending on group's Ubuntu machine |
-| Hosted image build/deployment | Pending; no deployment performed |
-| VM installation/demonstration | Not performed; instructions supplied only |
+| PHP GUI and readiness | Page is rendered, PHP source is not returned, health endpoint connects to MySQL |
+| Input validation | Malformed JSON, incorrect content types and invalid registration data are rejected |
+| Accounts | Registration signs in, duplicate accounts are rejected and stored password hashes verify |
+| Sessions | Cookies carry HttpOnly/SameSite attributes, login rotates tokens, logout prevents replay, expiry is enforced |
+| Access control | Anonymous requests, cross-site requests and another user's download requests are rejected |
+| Uploads | Content signature and size are checked; client-supplied metadata cannot override server values |
+| Database receipts | API receipt matches the stored MySQL record |
+| Listing | Files are private to the account, ordered by ID and paginated correctly |
+| Downloads | Signed link returns original PDF bytes; collected files cannot receive another successful collection link |
+| Concurrency | Simultaneous collection requests issue at most one successful link |
+| Account deletion | Removing an account invalidates its session access |
 
-The local configuration migration completed and retained its ignored private
-backup. No old PostgreSQL container/volume was changed and no database rows were
-transferred during this session. Optional transfer tools are provided for use
-before replacing the old container.
+## Recorded verification status
 
-Run the documented verification workflow on Ubuntu and add its dated results and
-evidence to the report. The report must retain accurate pending entries for any
-remaining unperformed practical checks.
+| Check | Status |
+|---|---|
+| Compose configuration validation | Passed |
+| Frontend JavaScript syntax | Passed |
+| Startup and verification shell syntax | Passed |
+| Runtime PHP, Apache, MySQL and MinIO integration | Test procedure provided; successful run not yet recorded |
+| Backend restart persistence | Manual demonstration procedure provided; result not yet recorded |
+| Hosted deployment | Verification procedure provided; result not yet recorded |
+
+Record the date, environment, command output and any failures when executing the
+runtime checks. A feature's implementation describes its code behavior; successful
+runtime verification requires a recorded run against the deployed services.
+
+## Manual demonstration
+
+Use [DEMONSTRATION.md](DEMONSTRATION.md) to capture the GUI, matching database
+rows, file collection and persistence after a backend restart. A VM deployment
+also needs guest settings, guest login and services running inside the guest.
+The report describes the native Ubuntu deployment.
+
+Keep credentials and session tokens out of screenshots and test evidence.

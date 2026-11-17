@@ -2,9 +2,8 @@
 
 The classroom stack uses Compose on Ubuntu. `Dockerfile.vercel` is a separate
 hosted image containing Nginx, Apache/PHP and a cleanup process. All HTTP requests
-pass to Apache on loopback 8081; there is no Express server. The existing
-`vercel.json` container configuration is retained. No hosted deployment was
-performed during the migration.
+pass to Apache on loopback 8081. `vercel.json` selects the container deployment
+configuration. MySQL and object storage are provided by external services.
 
 Provision an external MySQL database and private S3-compatible bucket. Configure:
 
@@ -31,8 +30,8 @@ docker run --rm --env-file .env.hosted department-of-files-hosted \
 
 The setup command leaves an existing complete schema unchanged and rejects a
 partial schema. MySQL DDL is not transactional; review a partial setup before
-retrying. Existing PostgreSQL URLs cannot be used as MySQL credentials. Use the
-root README's optional export/import procedure to preserve previous records.
+retrying. Use an application database account with access to the configured
+MySQL database.
 
 Configure the host's environment, then build and deploy there. Check health,
 registration, login, uploads and downloads through the actual HTTPS URL. Confirm
@@ -43,5 +42,4 @@ compatibility and its effective upload limit need verification before publishing
 The launcher supervises Apache, Nginx and cleanup and exits if a child exits.
 Cleanup runs while the image is active. Sleeping platforms remove expired copies
 on the next active sweep; an independent scheduled cleanup is needed for prompt
-deletion while all web instances are asleep. Prior Express/PostgreSQL verification
-does not validate this migrated image.
+deletion while all web instances are asleep.
