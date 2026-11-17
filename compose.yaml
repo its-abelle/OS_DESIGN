@@ -1,45 +1,76 @@
 services:
   minio:
-    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z  # minio/minio left Docker Hub; maintained fork
+    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: ${AWS_ACCESS_KEY_ID}
-      MINIO_ROOT_PASSWORD: ${AWS_SECRET_ACCESS_KEY}
-    ports: ["9100:9000", "9101:9001"]   # host 9000/9001 taken by another project; 9100 must be browser-reachable
+      MINIO_ROOT_USER: ${AWS_ACCESS_KEY_ID:?Set AWS_ACCESS_KEY_ID in .env}
+      MINIO_ROOT_PASSWORD: ${AWS_SECRET_ACCESS_KEY:?Set AWS_SECRET_ACCESS_KEY in .env}
+    ports: ["9100:9000", "127.0.0.1:9101:9001"]
     volumes: [minio_data:/data]
 
-  database:   # Stores accounts, sessions and uploaded file metadata
-    image: postgres:17-alpine
+  database:
+    image: mysql:8.4
     environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
-    volumes: [pgdata:/var/lib/postgresql/data, ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro]
+      MYSQL_USER: ${MYSQL_USER:?Set MYSQL_USER in .env}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?Set MYSQL_PASSWORD in .env}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:?Set MYSQL_DATABASE in .env}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Set MYSQL_ROOT_PASSWORD in .env}
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      test: ["CMD-SHELL", 'MYSQL_PWD="$$MYSQL_PASSWORD" mysql -h 127.0.0.1 -u "$$MYSQL_USER" "$$MYSQL_DATABASE" -e "SELECT 1" >/dev/null 2>&1']
       interval: 5s
-      retries: 10
+      timeout: 5s
+      retries: 30
+      start_period: 30s
 
   backend:
-    build: ./backend
+    image: department-of-files-php:local
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
     env_file: .env
-    restart: on-failure   # ensureBucket gives up after ~20s if MinIO isn't ready
+    environment:
+      MYSQL_HOST: database
+      MYSQL_PORT: "3306"
+      DEPLOYMENT_TARGET: compose
+    restart: on-failure
     depends_on:
       minio: { condition: service_started }
       database: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "php", "-r", "exit(@file_get_contents('http://127.0.0.1/api/health') === false ? 1 : 0);"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 40s
 
-  apache:   # Serves the frontend HTML/CSS/JS on the internal Docker network
-    image: httpd:2.4-alpine
-    volumes:
-      - ./frontend/public:/usr/local/apache2/htdocs:ro
-
-  frontend:   # Nginx entry point; Apache serves the UI
+  frontend:
     image: nginx:stable-alpine
     ports: ["8080:80"]
-    environment: { MAX_UPLOAD_MB: "${MAX_UPLOAD_MB:-10}" }   # same value the backend enforces
+    environment: { MAX_UPLOAD_MB: "${MAX_UPLOAD_MB:-10}" }
     volumes:
       - ./frontend/templates:/etc/nginx/templates:ro
       - ./frontend/15-upload-limit.envsh:/docker-entrypoint.d/15-upload-limit.envsh:ro
-    depends_on: [backend, apache]
+    depends_on:
+      backend: { condition: service_healthy }
 
-volumes: { minio_data: {}, pgdata: {} }
+  cleanup:
+    image: department-of-files-php:local
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    env_file: .env
+    environment:
+      MYSQL_HOST: database
+      MYSQL_PORT: "3306"
+      DEPLOYMENT_TARGET: compose
+    command: ["php", "/var/www/app/scripts/cleanup.php", "--loop"]
+    user: www-data
+    restart: unless-stopped
+    depends_on:
+      backend: { condition: service_healthy }
+
+# mysql_data is new. Never attach an old PostgreSQL data directory to MySQL.
+volumes: { minio_data: {}, mysql_data: {} }

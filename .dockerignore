@@ -6,3 +6,8 @@
 **/.env.*
 backend/test
 *.log
+
+**/vendor
+**/__pycache__
+docs
+migration-data*.json

@@ -366,7 +366,7 @@ $("upload-form").addEventListener("submit", async (event) => {
     if (current !== generation) return;
     clearSelection();
     message(
-      "Filed. Your PDF has a desk job now. Its receipt is saved in PostgreSQL.",
+      "Filed. Your PDF has a desk job now. Its receipt is saved in MySQL.",
     );
     $("desk-clerk").classList.add("approved");
     setTimeout(() => $("desk-clerk").classList.remove("approved"), 500);

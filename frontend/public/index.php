@@ -1,3 +1,10 @@
+<?php
+// This GUI is rendered by Apache/PHP; JavaScript provides interactive API calls.
+require '/var/www/app/vendor/autoload.php';
+$uploadLimitMb = (int) (\Department\Config::maxUploadBytes() / 1048576);
+header('Cache-Control: no-store');
+header('X-Content-Type-Options: nosniff');
+?>
 <!doctype html>
 <html lang="en">
   <head>
@@ -6,7 +13,7 @@
     <meta name="theme-color" content="#183524" />
     <meta
       name="description"
-      content="An unnecessarily official PDF cupboard. A Docker, Nginx, Apache and PostgreSQL practical."
+      content="An unnecessarily official PDF cupboard. A Docker, Nginx, Apache and MySQL practical."
     />
     <title>Department of Files — Please file responsibly.</title>
     <link rel="icon" href="/assets/file-pdf.svg" type="image/svg+xml" />
@@ -192,7 +199,7 @@
                   ><strong>Drop a PDF here</strong
                   ><span>or click to choose one</span
                   ><small id="upload-limit"
-                    >PDF only · up to 10 MB</small
+                    >PDF only · up to <?= $uploadLimitMb ?> MB</small
                   ></label
                 >
                 <div class="selected-file" id="selected-file" hidden>
@@ -280,7 +287,7 @@
             <div class="drawer-note">
               <img src="/assets/database.svg" alt="" />
               <p>
-                These records live in <strong>PostgreSQL</strong>.<br />The
+                These records live in <strong>MySQL</strong>.<br />The
                 actual PDFs live in <strong>MinIO</strong>. Different desks.
                 Same office.
               </p>
@@ -299,7 +306,7 @@
         </summary>
         <div class="stack-content">
           <p class="stack-intro">
-            Classroom setup: five containers. One very well-travelled PDF.
+            Classroom setup: four serving containers and a cleanup worker. One very well-travelled PDF.
             Here’s what each one actually does.
           </p>
           <ol class="stack-steps">
@@ -318,15 +325,15 @@
               <div>
                 <strong>Apache</strong>
                 <p>
-                  Serves this HTML, CSS and JavaScript. Yes, both web servers
-                  have jobs.
+                  Executes the PHP page and API handlers, and serves CSS,
+                  JavaScript and images from the backend container.
                 </p>
               </div>
             </li>
             <li>
               <span class="stack-number">03</span>
               <div>
-                <strong>Express</strong>
+                <strong>PHP</strong>
                 <p>
                   Checks sessions and ownership, validates PDFs, and handles API
                   requests.
@@ -336,7 +343,7 @@
             <li>
               <span class="stack-number">04</span>
               <div>
-                <strong>PostgreSQL</strong>
+                <strong>MySQL</strong>
                 <p>
                   Keeps users, sessions and file records: name, size, owner, key
                   and timestamp.
@@ -356,11 +363,11 @@
           </ol>
           <p class="stack-footnote">
             Docker Compose brings the office together. Named volumes keep
-            PostgreSQL and MinIO data across container restarts. Uploads go
-            Browser → Nginx → Express → PostgreSQL + MinIO; downloads go
+            MySQL and MinIO data across container restarts. Uploads go
+            Browser → Nginx → Apache/PHP → MySQL + MinIO; downloads go
             directly from MinIO using the authorised link.
-            The Vercel version combines Nginx, Apache and Express in one container
-            and connects to hosted PostgreSQL and object storage.
+            The Ubuntu host runs Docker. VM setup instructions are included
+            in the report; a VM has not been demonstrated by this application.
           </p>
         </div>
       </details>
@@ -369,7 +376,7 @@
       <span
         >DEPARTMENT OF FILES <span aria-hidden="true">/</span> A UNIVERSITY
         PRACTICAL</span
-      ><span>PostgreSQL has the receipts.</span>
+      ><span>MySQL has the receipts.</span>
     </footer>
     <noscript
       ><p class="noscript">
