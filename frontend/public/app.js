@@ -15,6 +15,45 @@ const issuedLinks = new Map(),
 const collectingKeys = new Set();
 const collectedKeys = new Set();
 
+const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+const activeAnimations = new Set();
+let stampTimer = null;
+
+document.addEventListener("keydown", () => {
+  document.body.dataset.input = "keyboard";
+  for (const animation of activeAnimations) animation.cancel();
+  activeAnimations.clear();
+});
+document.addEventListener("pointerdown", () => {
+  document.body.dataset.input = "pointer";
+}, { passive: true });
+reducedMotion.addEventListener("change", () => {
+  for (const animation of activeAnimations) animation.cancel();
+  activeAnimations.clear();
+});
+function animateFeedback(element, frames, duration = 200) {
+  if (!element || reducedMotion.matches || document.body.dataset.input === "keyboard" || !element.animate) return;
+  // A repeated interaction retargets its own feedback rather than stacking effects.
+  for (const animation of element.getAnimations()) animation.cancel();
+  const animation = element.animate(frames, { duration, easing: "cubic-bezier(0.22, 1, 0.36, 1)" });
+  activeAnimations.add(animation);
+  const forget = () => activeAnimations.delete(animation);
+  animation.addEventListener("finish", forget, { once: true });
+  animation.addEventListener("cancel", forget, { once: true });
+}
+function enterFeedback(element) {
+  animateFeedback(element, [{ opacity: 0.4, transform: "translateY(6px)" }, { opacity: 1, transform: "translateY(0)" }]);
+}
+function celebrateFiling() {
+  clearTimeout(stampTimer);
+  $("desk-clerk").classList.remove("working");
+  $("desk-clerk").classList.add("approved");
+  stampTimer = setTimeout(() => {
+    $("desk-clerk").classList.remove("approved");
+    stampTimer = null;
+  }, 1800);
+}
+
 class ApiError extends Error {
   constructor(status, message) {
     super(message);
@@ -33,7 +72,7 @@ async function api(path, options = {}) {
     if (options.signal?.aborted) throw error;
     throw new ApiError(
       0,
-      "The file office is unreachable. Check your connection and Docker services, then retry.",
+      "The file office is unreachable. Check your connection, then give it another try.",
     );
   }
   if (response.status === 204) return null;
@@ -58,7 +97,9 @@ function message(text, error = false) {
   $("notice").dataset.error = String(error);
   $("notice").setAttribute("role", error ? "alert" : "status");
   $("notice").setAttribute("aria-live", error ? "assertive" : "polite");
+  $("notice-illustration").hidden = error;
   $("notice").hidden = false;
+  enterFeedback($("notice"));
 }
 function sessionExpired(error) {
   if (error.status !== 401) return false;
@@ -71,6 +112,11 @@ function sessionExpired(error) {
 }
 function setSession(account) {
   generation++;
+  clearTimeout(stampTimer);
+  stampTimer = null;
+  for (const animation of activeAnimations) animation.cancel();
+  activeAnimations.clear();
+  $("desk-clerk").classList.remove("working", "approved");
   listController?.abort();
   for (const timer of timers) clearTimeout(timer);
   timers.clear();
@@ -88,6 +134,7 @@ function setSession(account) {
   $("session-controls").hidden = !user;
   $("office-note").hidden = Boolean(user);
   document.body.dataset.authenticated = String(Boolean(user));
+  enterFeedback(user ? $("workspace") : $("auth-view"));
   $("user-name").textContent = user?.username ?? "";
   $("greeting").textContent = user
     ? `WELCOME TO YOUR DESK, ${user.username.toUpperCase()}.`
@@ -113,15 +160,16 @@ function setMode(value) {
   $("username").required = register;
   $("password").autocomplete = register ? "new-password" : "current-password";
   $("auth-heading").textContent = register
-    ? "JOIN THE DEPARTMENT."
-    : "BACK FOR YOUR FILES?";
+    ? "MAKE YOURSELF AT HOME."
+    : "YOUR DESK IS READY.";
   $("auth-description").textContent = register
     ? "No interview. No tie. Just a place for your PDFs."
-    : "Good. We were starting to get attached.";
+    : "Sign in. Your PDFs have saved you a seat.";
   $("auth-submit-label").textContent = register
     ? "Create my account"
     : "Clock in";
   $("auth-error").hidden = true;
+  enterFeedback($("auth-heading"));
 }
 function authPending(pending) {
   authBusy = pending;
@@ -200,42 +248,63 @@ function date(value) {
   }).format(new Date(value));
 }
 function renderFiles(highlight) {
-  const fragment = document.createDocumentFragment();
+  const list = $("file-list");
+  const existing = new Map([...list.children].map((row) => [row.dataset.key, row]));
+  const wanted = new Set(files.map((file) => file.key));
+  let cursor = list.firstElementChild;
   for (const file of files) {
     if (collectedKeys.has(file.key)) file.available = false;
-    const row = $("file-template").content.firstElementChild.cloneNode(true);
-    row.dataset.key = file.key;
+    let row = existing.get(file.key);
+    const isNew = !row;
+    if (!row) {
+      row = $("file-template").content.firstElementChild.cloneNode(true);
+      row.dataset.key = file.key;
+      row.querySelector(".button-collect").addEventListener("click", () => {
+        const currentFile = files.find((entry) => entry.key === row.dataset.key);
+        if (currentFile) collect(currentFile, row);
+      });
+    }
     row.classList.toggle("unavailable", !file.available);
-    if (file.key === highlight) row.classList.add("just-filed");
     row.querySelector(".file-name").textContent = file.originalFilename;
-    row.querySelector(".file-meta").textContent =
-      `${bytes(file.sizeBytes)} · ${date(file.createdAt)}`;
+    row.querySelector(".file-meta").textContent = `${bytes(file.sizeBytes)} · ${date(file.createdAt)}`;
     row.querySelector(".receipt-id").textContent = String(file.id);
     row.querySelector(".receipt-owner").textContent = String(file.uploadedBy);
     row.querySelector(".receipt-key").textContent = file.key;
-    row.querySelector(".availability").textContent = file.available
-      ? "In the drawer"
-      : "Collected / unavailable";
+    row.querySelector(".availability").textContent = file.available ? "In the drawer" : "Collected / unavailable";
     const button = row.querySelector(".button-collect");
-    button.disabled = !file.available || collectingKeys.has(file.key);
+    const busy = collectingKeys.has(file.key);
+    button.disabled = !file.available || busy;
+    button.classList.toggle("busy", busy);
     button.setAttribute("aria-label", `Collect ${file.originalFilename}`);
-    button.querySelector("span").textContent = file.available
-      ? "Collect PDF"
-      : "Not in drawer";
-    button.addEventListener("click", () => collect(file, row));
+    button.querySelector("span").textContent = busy ? "Dispatching…" : file.available ? "Collect PDF" : "Not in drawer";
     const issued = issuedLinks.get(file.key);
-    if (issued && issued.expires > Date.now()) {
-      const retry = row.querySelector(".retry-download");
+    const retry = row.querySelector(".retry-download");
+    retry.hidden = !(issued && issued.expires > Date.now());
+    if (!retry.hidden) {
       retry.href = issued.url;
-      retry.hidden = false;
       retry.setAttribute("download", file.originalFilename);
+    } else {
+      retry.removeAttribute("href");
     }
-    fragment.append(row);
+    // Keep existing nodes in place to preserve focus and expanded receipts.
+    if (row !== cursor) list.insertBefore(row, cursor);
+    else cursor = cursor.nextElementSibling;
+    if (isNew && file.key === highlight) {
+      row.classList.add("just-filed");
+      enterFeedback(row);
+      const current = generation;
+      const timer = setTimeout(() => {
+        timers.delete(timer);
+        if (current === generation) row.classList.remove("just-filed");
+      }, 1600);
+      timers.add(timer);
+    }
   }
-  $("file-list").replaceChildren(fragment);
+  for (const row of [...list.children]) {
+    if (!wanted.has(row.dataset.key)) row.remove();
+  }
   $("empty-state").hidden = files.length !== 0;
-  $("record-count").textContent =
-    `${files.length} ${files.length === 1 ? "record" : "records"} loaded · your files only`;
+  $("record-count").textContent = `${files.length} ${files.length === 1 ? "file" : "files"} in your private drawer`;
   $("load-more").hidden = nextCursor === null;
 }
 async function loadFiles(more = false, highlight) {
@@ -310,6 +379,12 @@ async function selectFile(file) {
   selectedFile = file;
   $("selected-name").textContent = file.name;
   $("selected-file").hidden = false;
+  $("drop-zone").classList.add("has-file");
+  enterFeedback($("selected-file"));
+  animateFeedback($("drop-zone").querySelector(".upload-symbol img"), [
+    { transform: "translateY(-6px) rotate(-5deg)" },
+    { transform: "translateY(0) rotate(-4deg)" },
+  ], 240);
   $("upload-submit").disabled = false;
   $("upload-status").textContent =
     "A promising document. Ready for official filing.";
@@ -319,6 +394,7 @@ function clearSelection() {
   selectedFile = null;
   $("file-input").value = "";
   $("selected-file").hidden = true;
+  $("drop-zone").classList.remove("has-file", "dragging");
   $("upload-submit").disabled = true;
   $("upload-status").textContent = "No file selected. The clerk is on standby.";
 }
@@ -357,19 +433,21 @@ $("upload-form").addEventListener("submit", async (event) => {
   $("clear-file").disabled = true;
   $("logout").disabled = true;
   $("upload-form").setAttribute("aria-busy", "true");
+  clearTimeout(stampTimer);
+  stampTimer = null;
+  $("desk-clerk").classList.remove("approved");
   $("desk-clerk").classList.add("working");
   $("upload-submit-label").textContent = "Filing in triplicate…";
   $("upload-status").textContent =
-    "Storing PDF bytes and saving the database receipt…";
+    "Finding a cosy spot for your PDF…";
   try {
     const result = await api("/files", { method: "POST", body: form });
     if (current !== generation) return;
     clearSelection();
     message(
-      "Filed. Your PDF has a desk job now. Its receipt is saved in MySQL.",
+      "Filed with a smile. Your PDF is right at home in the drawer.",
     );
-    $("desk-clerk").classList.add("approved");
-    setTimeout(() => $("desk-clerk").classList.remove("approved"), 500);
+    celebrateFiling();
     await loadFiles(false, result.key);
   } catch (error) {
     if (current === generation && !sessionExpired(error)) {
@@ -414,6 +492,7 @@ async function collect(file, row) {
     anchor.remove();
     collectingKeys.delete(file.key);
     renderFiles();
+    enterFeedback(row.querySelector(".availability"));
     message(
       "PDF dispatched. The database receipt is staying put. Use “Retry issued link” within 60 seconds if needed.",
     );

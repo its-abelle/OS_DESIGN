@@ -13,7 +13,7 @@ header('X-Content-Type-Options: nosniff');
     <meta name="theme-color" content="#183524" />
     <meta
       name="description"
-      content="An unnecessarily official PDF cupboard. A Docker, Nginx, Apache and MySQL practical."
+      content="A happy little home for your PDFs. File them, find them, and get on with your day."
     />
     <title>Department of Files — Please file responsibly.</title>
     <link rel="icon" href="/assets/file-pdf.svg" type="image/svg+xml" />
@@ -28,7 +28,7 @@ header('X-Content-Type-Options: nosniff');
           ><img src="/assets/file-pdf.svg" alt="" /></span
         ><span
           >DEPARTMENT<br />OF FILES<span class="brand-caption"
-            >A very small university practical.</span
+            >A little order. A lot less paperwork.</span
           ></span
         ></a
       >
@@ -51,25 +51,23 @@ header('X-Content-Type-Options: nosniff');
         aria-labelledby="welcome-heading"
       >
         <div class="welcome-copy">
-          <p class="section-label">THE INTERNET’S LEAST INTIMIDATING OFFICE</p>
+          <p class="section-label">YOUR FRIENDLY NEIGHBOURHOOD FILE OFFICE</p>
           <h1 id="welcome-heading">
-            YOUR PDFs.<br />OUR VERY<br /><em>SERIOUS</em> BUSINESS.
+            YOUR PDFs.<br />A LITTLE<br /><em>LESS CHAOS.</em>
           </h1>
           <p class="intro">
-            A little place to file your PDFs, collect them later, and prove that
-            your Docker containers are doing actual work.
+            A happy little home for your PDFs. Drop one in, collect it later,
+            and leave the filing to us.
           </p>
           <div class="clerk-scene" aria-hidden="true">
-            <div class="paper-clerk welcome-clerk">
-              <i class="fold"></i><i class="eyes"></i><i class="mouth"></i
-              ><span>PDF</span>
-            </div>
-            <div class="speech-note">I have a desk job.</div>
-            <span class="rubber-stamp">PLEASE FILE<br />RESPONSIBLY.</span>
+            <img class="welcome-mascot" src="/assets/folder-friend.webp"
+              width="280" height="220" alt="" fetchpriority="high" />
+            <div class="speech-note">Big smile.<br />Tiny workload.</div>
+            <span class="office-seal">LESS MESS.<br />MORE YES.</span>
           </div>
         </div>
         <section class="auth-panel" aria-labelledby="auth-heading">
-          <div class="panel-tab">VISITOR SERVICES</div>
+          <div class="panel-tab">COME ON IN.</div>
           <div class="auth-inner">
           <div class="mode-switch" role="group" aria-label="Account action">
               <button type="button" id="login-mode" aria-pressed="true">
@@ -78,9 +76,9 @@ header('X-Content-Type-Options: nosniff');
                 Create account
               </button>
             </div>
-            <h2 id="auth-heading">BACK FOR YOUR FILES?</h2>
+            <h2 id="auth-heading">YOUR DESK IS READY.</h2>
             <p id="auth-description" class="muted">
-              Good. We were starting to get attached.
+              Sign in. Your PDFs have saved you a seat.
             </p>
             <form id="auth-form">
               <div id="username-field" hidden>
@@ -156,19 +154,16 @@ header('X-Content-Type-Options: nosniff');
             <p class="section-label" id="greeting">YOUR PERSONAL FILE OFFICE</p>
             <h1 id="workspace-heading">LET’S FILE SOMETHING.</h1>
             <p>
-              A home for PDFs. An excuse to say “it works on my containers.”
+              A little space for your files. A little less on your mind.
             </p>
           </div>
-          <div
-            class="paper-clerk desk-clerk"
-            id="desk-clerk"
-            aria-hidden="true"
-          >
-            <i class="fold"></i><i class="eyes"></i><i class="mouth"></i
-            ><span>EMPLOYEE<br />OF THE BYTE</span>
+          <div class="desk-clerk" id="desk-clerk" aria-hidden="true">
+            <img class="desk-folder" src="/assets/folder-friend.webp" width="144" height="112" alt="" />
+            <img class="desk-stamp" src="/assets/filed-stamp.webp" width="96" height="96" alt="" />
           </div>
         </div>
         <div class="notice" id="notice" role="status" aria-live="polite" hidden>
+          <img id="notice-illustration" class="notice-illustration" src="/assets/filed-stamp.webp" width="48" height="48" alt="" aria-hidden="true" hidden />
           <span id="notice-text"></span
           ><button
             type="button"
@@ -195,7 +190,7 @@ header('X-Content-Type-Options: nosniff');
                     accept=".pdf,application/pdf"
                     class="visually-hidden"
                   /><span class="upload-symbol"
-                    ><img src="/assets/upload-simple.svg" alt="" /></span
+                    ><img src="/assets/open-folder.webp" width="100" height="80" alt="" /></span
                   ><strong>Drop a PDF here</strong
                   ><span>or click to choose one</span
                   ><small id="upload-limit"
@@ -259,13 +254,12 @@ header('X-Content-Type-Options: nosniff');
               <span>Checking the filing cabinet…</span><i></i><i></i><i></i>
             </div>
             <div class="empty-state" id="empty-state" hidden>
-              <span class="empty-icon"
-                ><img src="/assets/tray.svg" alt=""
+              <span class="empty-icon" aria-hidden="true"
+                ><img src="/assets/open-folder.webp" width="176" height="144" alt=""
               /></span>
               <h3>NOTHING TO MISPLACE. YET.</h3>
               <p>
-                Your drawer is empty. Give the clerk a PDF<br />and a renewed
-                sense of purpose.
+                Every organised person starts somewhere.<br />Your first PDF will feel right at home.
               </p>
               <button class="text-button" type="button" id="empty-choose">
                 Choose your first PDF →
@@ -285,98 +279,18 @@ header('X-Content-Type-Options: nosniff');
               Open the next drawer →
             </button>
             <div class="drawer-note">
-              <img src="/assets/database.svg" alt="" />
-              <p>
-                These records live in <strong>MySQL</strong>.<br />The
-                actual PDFs live in <strong>MinIO</strong>. Different desks.
-                Same office.
-              </p>
+              <img src="/assets/lock-simple.svg" alt="" />
+              <p>A drawer with your name on it. Only you can see and collect these files.</p>
             </div>
           </section>
         </div>
       </section>
-      <details class="stack-map" id="stack-map">
-        <summary>
-          <span
-            ><img src="/assets/cube.svg" alt="" />FOR THE LECTURER: FOLLOW A
-            FILE</span
-          ><span class="summary-action"
-            >Under the hood <span aria-hidden="true">+</span></span
-          >
-        </summary>
-        <div class="stack-content">
-          <p class="stack-intro">
-            Classroom setup: four serving containers and a cleanup worker. One very well-travelled PDF.
-            Here’s what each one actually does.
-          </p>
-          <ol class="stack-steps">
-            <li>
-              <span class="stack-number">01</span>
-              <div>
-                <strong>Nginx</strong>
-                <p>
-                  The front desk. Receives browser requests on port 8080 and
-                  directs traffic.
-                </p>
-              </div>
-            </li>
-            <li>
-              <span class="stack-number">02</span>
-              <div>
-                <strong>Apache</strong>
-                <p>
-                  Executes the PHP page and API handlers, and serves CSS,
-                  JavaScript and images from the backend container.
-                </p>
-              </div>
-            </li>
-            <li>
-              <span class="stack-number">03</span>
-              <div>
-                <strong>PHP</strong>
-                <p>
-                  Checks sessions and ownership, validates PDFs, and handles API
-                  requests.
-                </p>
-              </div>
-            </li>
-            <li>
-              <span class="stack-number">04</span>
-              <div>
-                <strong>MySQL</strong>
-                <p>
-                  Keeps users, sessions and file records: name, size, owner, key
-                  and timestamp.
-                </p>
-              </div>
-            </li>
-            <li>
-              <span class="stack-number">05</span>
-              <div>
-                <strong>MinIO</strong>
-                <p>
-                  Keeps the PDF bytes. Sends them back using a short-lived
-                  signed URL.
-                </p>
-              </div>
-            </li>
-          </ol>
-          <p class="stack-footnote">
-            Docker Compose brings the office together. Named volumes keep
-            MySQL and MinIO data across container restarts. Uploads go
-            Browser → Nginx → Apache/PHP → MySQL + MinIO; downloads go
-            directly from MinIO using the authorised link.
-            The Ubuntu host runs Docker. The README explains how to set up
-            a VM and test each part of this stack.
-          </p>
-        </div>
-      </details>
     </main>
     <footer class="footer wrap">
       <span
-        >DEPARTMENT OF FILES <span aria-hidden="true">/</span> A UNIVERSITY
-        PRACTICAL</span
-      ><span>MySQL has the receipts.</span>
+        >DEPARTMENT OF FILES <span aria-hidden="true">/</span> YOUR LITTLE
+        FILE OFFICE</span
+      ><span>Less paperwork. More peace of mind.</span>
     </footer>
     <noscript
       ><p class="noscript">
