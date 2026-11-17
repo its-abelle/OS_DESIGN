@@ -1,166 +1,140 @@
 # Department of Files — COSC 428
 
-A PHP and MySQL application for registering accounts, signing in, uploading PDFs
-and collecting them through temporary links. Apache executes the PHP GUI and API
-in the backend container. Nginx is the public reverse proxy. MinIO holds private
-PDF bytes; MySQL holds accounts, sessions and file receipts.
-
-## Architecture
+A small PHP/MySQL application for registering accounts, uploading PDFs and
+collecting your own files. Use this guide to set it up and demonstrate the
+assignment.
 
 ```text
-Ubuntu host (or Ubuntu guest VM; instructions provided separately)
-└── Docker Compose network
-    Browser → :8080 Nginx → backend:80 Apache + PHP
-                                     ├── database:3306 MySQL 8.4
-                                     └── minio:9000 private PDF storage
-    Browser ← :9100 MinIO, through a 60-second signed download link
-    cleanup worker → MinIO expired copies + MySQL expired sessions
+Ubuntu VM → Docker → Nginx → Apache/PHP → MySQL + MinIO
 ```
 
-Five services: `frontend`, `backend`, `database`, `minio`, `cleanup`. Apache and
-PHP 8.4 share the backend image. MySQL has no published host port. Named volumes
-`mysql_data` and `minio_data` preserve records and objects. Docker runs on Ubuntu;
-its container images do not need to be Ubuntu-based. The project uses a native
-Ubuntu host. A separate Ubuntu VM setup procedure is provided in the environment
-guide.
+## 1. Set up the Ubuntu VM
 
-## Project structure
+1. Install [VirtualBox](https://www.virtualbox.org/wiki/Downloads) on your computer.
+2. Download an [Ubuntu Desktop LTS ISO](https://ubuntu.com/download/desktop).
+3. Create a VM called `COSC428-Ubuntu`. Suggested resources: 4 CPUs, 8 GB RAM and
+   a 40 GB disk. Attach the Ubuntu ISO and keep NAT networking enabled.
+4. Start the VM, install Ubuntu, create a user and log in.
+5. Open **Terminal inside the VM**. Run the remaining commands there and use the
+   VM's browser to view the frontend. [Ubuntu's VM walkthrough](https://ubuntu.com/tutorials/how-to-run-ubuntu-desktop-on-a-virtual-machine-using-virtualbox)
 
-| Path | Purpose |
-|---|---|
-| `compose.yaml` | Service configuration, networking, dependencies and persistent volumes |
-| `.env.example` | Database, session, storage and upload settings |
-| `backend/Dockerfile` | Apache/PHP image and application dependencies |
-| `backend/apache.conf` | PHP page index, API routing and public-directory rules |
-| `backend/src/` | PHP request handlers, PDO connection, configuration and storage operations |
-| `backend/public/api.php` | Public API entry point |
-| `backend/scripts/` | Readiness, schema administration and cleanup commands |
-| `frontend/public/` | PHP GUI, JavaScript, styles, fonts and icons |
-| `frontend/templates/` | Nginx reverse-proxy template |
-| `db/init.sql` | MySQL account, file and session schema |
-| `backend/tests/integration.py` | HTTP/database/storage integration checks |
-| `scripts/verify.sh` | Application verification command |
-| `docs/` | Assignment, report, environment setup and demonstration guides |
+You can also run the project on Ubuntu already installed on your computer.
+Demonstrating virtualisation requires running it inside the VM.
 
-## Setup on Ubuntu
+## 2. Install the tools
 
-Install Docker Engine, its Compose plugin, Git and Python 3 using
-[the Ubuntu setup guide](docs/UBUNTU-SETUP.md). PHP/Composer run inside Docker.
-Create the local configuration if `.env` is not already present:
+On a new Ubuntu installation:
 
 ```bash
-cp .env.example .env
+sudo apt update
+sudo apt install -y git python3 curl nano
+sudo apt install -y docker.io docker-compose-v2
+sudo systemctl enable --now docker
+sudo usermod -aG docker "$USER"
 ```
 
-Replace the three password placeholders in `.env` with different random values.
-Keep a configured `.env` when rebuilding the application.
+If Docker and Compose already work, keep that installation and skip installing
+`docker.io` and `docker-compose-v2`. Ubuntu provides the [Compose package](https://packages.ubuntu.com/search?keywords=docker-compose-v2).
+
+**Log out of Ubuntu and log in again** so Docker permissions take effect. Check:
+
+```bash
+docker run --rm hello-world
+docker compose version
+```
+
+## 3. Get and start the project
+
+```bash
+git clone https://github.com/its-abelle/OS_DESIGN.git
+cd OS_DESIGN
+cp .env.example .env
+nano .env
+```
+
+In `.env`, replace `MYSQL_PASSWORD`, `MYSQL_ROOT_PASSWORD` and
+`AWS_SECRET_ACCESS_KEY` with three different passwords of at least 16 characters.
+Keep the other settings for testing in the VM's browser. Save and close the file.
+If you already have the project and a configured `.env`, keep them and run these
+commands from the project folder:
 
 ```bash
 docker compose config --quiet
 docker compose up --build -d --remove-orphans --wait
 docker compose ps
-curl --fail http://localhost:8080/api/health
 ```
 
-Open **http://localhost:8080**. MinIO's administration console is
-**http://localhost:9101**, available on the Ubuntu host only. Its credentials are
-`AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` from `.env`.
-For a browser on another computer, set
-`S3_PUBLIC_ENDPOINT=http://<Ubuntu-IP>:9100` and open `http://<Ubuntu-IP>:8080`.
-After changing `.env`:
+The first build needs internet access and may take several minutes. The five
+services are `frontend` (Nginx), `backend` (Apache/PHP), `database` (MySQL),
+`minio` (PDF storage) and `cleanup` (expired downloads and sessions).
+
+## 4. Open and use the frontend
+
+Open **http://localhost:8080** in the Ubuntu VM's browser.
+
+1. Create an account, then sign out and sign in again.
+2. Choose a small PDF and select **File this PDF**.
+3. Expand **Database receipt** and note the file ID and owner ID.
+4. Select **Collect PDF** and check the downloaded file. Its receipt stays visible.
+5. Create another account and confirm it cannot see the first account's files.
+
+To use your computer's browser outside the VM, forward VirtualBox host ports
+8080 and 9100 to the same guest ports. Then open `http://localhost:8080` on that
+computer. For another computer on the network, use bridged VM networking and set
+`S3_PUBLIC_ENDPOINT=http://<Ubuntu-IP>:9100` in `.env` before starting the stack.
+
+## 5. Test each assignment requirement
+
+Run these commands from the project folder inside Ubuntu:
+
+| Requirement | What to do | What to show |
+|---|---|---|
+| Virtualisation | Run `systemd-detect-virt` inside the VM | VM settings, Ubuntu guest desktop, and detected hypervisor such as `oracle` or `kvm` |
+| Containerisation | Run `docker compose ps` | Five running services; backend and database healthy |
+| Nginx configuration | Run `docker compose exec frontend nginx -t` | Successful configuration check |
+| Apache configuration | Run `docker compose exec backend apache2ctl -t` | `Syntax OK` |
+| PHP application | Run `docker compose exec backend php -v`, then register and upload through the GUI | PHP version and functioning frontend |
+| Database integration | Run `curl --fail http://localhost:8080/api/health`, then inspect MySQL below | Health response naming PHP/MySQL and rows matching the GUI |
+
+Inspect the database:
 
 ```bash
-docker compose up -d --force-recreate backend cleanup frontend
+docker compose exec database sh -c 'exec mysql -u "$MYSQL_USER" -p "$MYSQL_DATABASE"'
 ```
 
-`MAX_UPLOAD_MB` is an integer from 1 to 100 (default 10). Nginx allows one MB of
-multipart overhead; PHP checks the actual file size. Keep
-`SESSION_COOKIE_SECURE=false` for local HTTP; use `true` for HTTPS browser access.
+Enter `MYSQL_PASSWORD` from `.env` at the prompt, then run:
 
-## Configuration and persistence
+```sql
+SELECT id, username, email FROM users;
+SELECT id, original_filename, uploaded_by, size_bytes FROM files;
+exit;
+```
 
-The example environment file groups MySQL connection details, database
-administration, session cookies, object storage, the public storage endpoint and
-the upload limit. PHP connects as the application database user. The root
-password is used to initialise MySQL administration.
+Match the file ID and owner ID with the GUI receipt. To test persistence, run
+`docker compose restart backend`, wait for it to become healthy, then refresh
+the frontend. Your account and receipts should remain.
 
-MySQL creates the configured database and loads `db/init.sql` when its data
-volume is first initialised. Named volumes retain database records and PDF
-objects when containers restart or are recreated. Changing an environment
-password does not update an account already stored in a MySQL volume.
-Use `docker compose down` to stop and remove containers while retaining data.
-
-## Verification
-
-After the containers are healthy:
+For automated checks, run:
 
 ```bash
 sh scripts/verify.sh
 ```
 
-This checks PHP syntax, Composer metadata, Apache/Nginx configuration and the
-real application through Nginx. Integration checks cover registration, validation,
-password hashes in MySQL, duplicate accounts, sessions, logout/replay, expiry,
-file ownership, upload limits, receipt persistence, pagination, downloads and
-concurrent collection. Temporary accounts, records and objects are removed in
-`finally`. Run against the local Compose stack with host-reachable storage URLs.
+This checks PHP and web-server configuration, registration, sessions, private
+uploads, MySQL records and downloads. It removes its temporary test accounts and
+files. Save successful output and screenshots as evidence; test results must come
+from running the commands.
 
-The AWS SDK dependency is declared in `backend/composer.json`. The build uses
-`backend/composer.lock` when present. To generate or update a dependency lock
-for reproducible builds, run:
+## 6. Stop, troubleshoot and submit
 
-```bash
-docker compose run --rm --no-deps --entrypoint composer \
-  -v "$PWD/backend:/work" -w /work backend update --no-dev --no-interaction
-docker compose up --build -d --wait
-```
+- **Stop:** `docker compose down`. Data volumes remain; avoid adding `-v`.
+- **See errors:** `docker compose logs --tail=50 backend database frontend`.
+- **Docker permission denied:** log out and back in after joining the Docker group.
+- **Directory listing or wrong page:** use port **8080**, rebuild with
+  `docker compose up --build -d --remove-orphans --force-recreate --wait`.
+- **Download fails:** check the browser can reach `S3_PUBLIC_ENDPOINT`.
+- **Changed `.env`:** run `docker compose up -d --force-recreate backend cleanup frontend`.
 
-Commit the generated lock file with the application source.
-
-## Behavior and API
-
-PHP hashes passwords using bcrypt (cost 12). A random 256-bit session token goes
-into an HttpOnly, SameSite=Lax `os_sid` cookie; only its SHA-256 hash is stored in
-MySQL. Sessions last 24 hours. Login rotates the token and logout deletes it.
-Expired sessions and deleted accounts are rejected. PDO prepared statements
-handle user-controlled database values.
-
-Uploads require a session, one multipart `file`, a `%PDF-` signature, and an
-allowed size. The signature check does not establish that a PDF is harmless.
-PHP stores the object with a UUID key and inserts its receipt in MySQL. Failed
-inserts trigger a best-effort object deletion; failed cleanup is logged. MySQL
-and S3 cannot share a transaction.
-
-Listing returns the current user's records, cursor pagination, and availability.
-Collection checks ownership, takes a per-file MySQL advisory lock, copies to
-`downloaded/`, removes the live object, and returns a 60-second signed URL.
-Issued URLs remain reusable until expiry, including after logout. The cleanup
-worker sweeps every minute and deletes copies at least 120 seconds old. MySQL
-receipts remain visible after collection.
-
-| Method and path | Purpose |
-|---|---|
-| `GET /api/health` | PHP/MySQL readiness |
-| `POST /api/auth/register` | JSON username/email/password; `{ user }`, 201 |
-| `POST /api/auth/login` | JSON email/password; `{ user }` |
-| `GET /api/auth/me` | Current user, or 401 |
-| `POST /api/auth/logout` | JSON `{}`; clear session, 204 |
-| `POST /api/files` | Multipart `file`; saved receipt, 201 |
-| `GET /api/files?limit=20&before=<id>` | Files, nextCursor, maxUploadBytes |
-| `GET /api/files/<key>/download` | url and expiresIn |
-
-Errors return JSON `{ error }`. Database failures return a safe 500, missing
-objects 404, rejected storage credentials 502, and unreachable storage 503.
-Details stay in container logs.
-
-## Submission documents
-
-- [Lecturer's assignment](docs/ASSIGNMENT.md)
-- [Written report](docs/REPORT.md)
-- [Ubuntu setup and VM instructions](docs/UBUNTU-SETUP.md)
-- [Demonstration and evidence checklist](docs/DEMONSTRATION.md)
-- [Validation procedure and status](docs/VALIDATION.md)
-- [Optional hosted image](deploy/vercel/README.md)
-
-Fill in group details and actual practical results before submitting the report.
-The supplied deadline is **the 26th**, with no month/year specified.
+Complete the group details and attach your results to the [report](docs/REPORT.md).
+Include evidence for all six checks above. The supplied deadline is **the 26th**;
+confirm the month and submission details with the lecturer.

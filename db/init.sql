@@ -1,5 +1,4 @@
 -- MySQL 8.4. Compose creates the selected MYSQL_DATABASE before running this file.
--- Existing PostgreSQL data/volumes are left untouched by the PHP migration.
 CREATE TABLE users (
   id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
   username VARCHAR(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL UNIQUE,

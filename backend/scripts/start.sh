@@ -9,7 +9,6 @@ if [ "$upload_mb" -lt 1 ] || [ "$upload_mb" -gt 100 ]; then
   echo 'MAX_UPLOAD_MB must be an integer from 1 to 100' >&2
   exit 1
 fi
-if [ "${DEPLOYMENT_TARGET:-compose}" = vercel ] && [ "$upload_mb" -gt 4 ]; then upload_mb=4; fi
 cat > /usr/local/etc/php/conf.d/uploads.ini <<EOF
 upload_max_filesize=${upload_mb}M
 post_max_size=$((upload_mb + 1))M

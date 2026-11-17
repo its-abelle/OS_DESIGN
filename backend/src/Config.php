@@ -20,9 +20,6 @@ final class Config
         if ($mb === false || $mb < 1 || $mb > 100) {
             throw new \RuntimeException('MAX_UPLOAD_MB must be an integer from 1 to 100');
         }
-        if (self::env('DEPLOYMENT_TARGET', 'compose') === 'vercel') {
-            $mb = min($mb, 4);
-        }
         return $mb * 1024 * 1024;
     }
 }

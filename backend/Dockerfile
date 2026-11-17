@@ -8,12 +8,10 @@ RUN apt-get update \
 COPY --from=composer:2 /usr/bin/composer /usr/local/bin/composer
 WORKDIR /var/www/app
 COPY backend/composer.* ./
-# Commit composer.lock after resolving dependencies on a machine with Composer.
-# This environment cannot resolve Packagist. Build currently resolves compatible versions.
+# Install the PHP storage SDK and application dependencies.
 RUN composer install --no-dev --prefer-dist --no-interaction --no-progress --no-scripts
 COPY backend/src ./src
 COPY backend/scripts ./scripts
-COPY db/init.sql ./db/init.sql
 COPY frontend/public /var/www/html
 COPY backend/public /var/www/html
 COPY backend/apache.conf /etc/apache2/conf-enabled/department.conf

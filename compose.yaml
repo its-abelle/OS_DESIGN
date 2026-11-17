@@ -34,7 +34,6 @@ services:
     environment:
       MYSQL_HOST: database
       MYSQL_PORT: "3306"
-      DEPLOYMENT_TARGET: compose
     restart: on-failure
     depends_on:
       minio: { condition: service_started }
@@ -65,12 +64,10 @@ services:
     environment:
       MYSQL_HOST: database
       MYSQL_PORT: "3306"
-      DEPLOYMENT_TARGET: compose
     command: ["php", "/var/www/app/scripts/cleanup.php", "--loop"]
     user: www-data
     restart: unless-stopped
     depends_on:
       backend: { condition: service_healthy }
 
-# mysql_data is new. Never attach an old PostgreSQL data directory to MySQL.
 volumes: { minio_data: {}, mysql_data: {} }

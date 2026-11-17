@@ -366,8 +366,8 @@ header('X-Content-Type-Options: nosniff');
             MySQL and MinIO data across container restarts. Uploads go
             Browser → Nginx → Apache/PHP → MySQL + MinIO; downloads go
             directly from MinIO using the authorised link.
-            The Ubuntu host runs Docker. VM setup instructions are included
-            in the report; a VM has not been demonstrated by this application.
+            The Ubuntu host runs Docker. The README explains how to set up
+            a VM and test each part of this stack.
           </p>
         </div>
       </details>
