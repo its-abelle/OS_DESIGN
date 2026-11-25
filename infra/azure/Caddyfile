@@ -1,0 +1,7 @@
+{$APP_HOST} {
+	reverse_proxy frontend:80
+}
+
+https://{$APP_HOST}:9443 {
+	reverse_proxy minio:9000
+}

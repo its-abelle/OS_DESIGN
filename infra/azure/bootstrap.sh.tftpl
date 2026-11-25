@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+set -euo pipefail
+umask 077
+
+systemctl enable --now docker
+if [ ! -d /opt/department-of-files/.git ]; then
+  git clone https://github.com/its-abelle/OS_DESIGN.git /opt/department-of-files
+fi
+cd /opt/department-of-files
+git checkout --detach '${source_revision}'
+
+# Keep existing credentials when troubleshooting or rerunning setup.
+if [ ! -s .env ]; then
+  cat > .env <<ENV
+APP_HOST=${app_host}
+MYSQL_HOST=database
+MYSQL_PORT=3306
+MYSQL_DATABASE=appdb
+MYSQL_USER=app
+MYSQL_PASSWORD=$(openssl rand -hex 24)
+MYSQL_ROOT_PASSWORD=$(openssl rand -hex 24)
+SESSION_COOKIE_SECURE=true
+AWS_REGION=us-east-1
+S3_BUCKET_NAME=documents
+AWS_ACCESS_KEY_ID=minioadmin
+AWS_SECRET_ACCESS_KEY=$(openssl rand -hex 24)
+S3_ENDPOINT=http://minio:9000
+S3_PUBLIC_ENDPOINT=https://${app_host}:9443
+MAX_UPLOAD_MB=10
+ENV
+fi
+chmod 600 .env
+cat > compose.azure.yaml <<'COMPOSE'
+${compose}
+COMPOSE
+cat > Caddyfile <<'CADDY'
+${caddyfile}
+CADDY
+
+docker compose -f compose.yaml -f compose.azure.yaml config --quiet
+docker compose -f compose.yaml -f compose.azure.yaml up --build -d --wait --wait-timeout 600
+curl --fail --silent --show-error --retry 12 --retry-all-errors --retry-delay 5 \
+  --connect-timeout 5 --max-time 20 'https://${app_host}/api/health'
