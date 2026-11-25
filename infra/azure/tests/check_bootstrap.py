@@ -1,5 +1,7 @@
 """Check the rendered Azure bootstrap and Compose overrides without provisioning."""
 import json
+import shlex
+import stat
 from pathlib import Path
 import subprocess
 import tempfile
@@ -31,6 +33,17 @@ assert 'SESSION_COOKIE_SECURE=true' in script
 assert 'if [ ! -s .env ]; then' in script
 assert script.count('$(openssl rand -hex 24)') == 3
 with tempfile.TemporaryDirectory() as temp:
+    clone = Path(temp) / 'app'
+    clone_script = script[:script.index('# Keep existing credentials')]
+    clone_script = clone_script.replace('systemctl enable --now docker', ':')
+    clone_script = clone_script.replace('https://github.com/its-abelle/OS_DESIGN.git', shlex.quote(str(ROOT)))
+    clone_script = clone_script.replace('/opt/department-of-files', shlex.quote(str(clone)))
+    clone_script += '\nprintf test > ' + shlex.quote(str(clone / '.env')) + '\n'
+    subprocess.run(['bash', '-c', clone_script], text=True, capture_output=True, check=True)
+    for name in ['db/init.sql', 'backend/src/App.php', 'frontend/public/index.php']:
+        assert (clone / name).stat().st_mode & stat.S_IROTH, name + ' must be readable by container users'
+    assert (clone / 'backend/src').stat().st_mode & stat.S_IXOTH
+    assert stat.S_IMODE((clone / '.env').stat().st_mode) == 0o600
     env_file = Path(temp) / '.env'
     env_file.write_text('APP_HOST=' + inputs['app_host'] + '\nMYSQL_USER=app\n'
                         'MYSQL_DATABASE=appdb\nMYSQL_PASSWORD=test-app-password\n'

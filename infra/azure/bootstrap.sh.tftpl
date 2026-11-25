@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-umask 077
+umask 022
 
 systemctl enable --now docker
 if [ ! -d /opt/department-of-files/.git ]; then
@@ -8,6 +8,8 @@ if [ ! -d /opt/department-of-files/.git ]; then
 fi
 cd /opt/department-of-files
 git checkout --detach '${source_revision}'
+
+umask 077
 
 # Keep existing credentials when troubleshooting or rerunning setup.
 if [ ! -s .env ]; then
