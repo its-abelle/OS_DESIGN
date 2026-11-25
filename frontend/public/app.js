@@ -9,7 +9,9 @@ let maxUploadBytes = 10 * 1024 * 1024,
   authBusy = true,
   uploadBusy = false,
   generation = 0;
+let currentPage = 0, pageCursors = [null], searchQuery = "";
 let selectionRevision = 0;
+let noticeTimer;
 const issuedLinks = new Map(),
   timers = new Set();
 const collectingKeys = new Set();
@@ -17,7 +19,6 @@ const collectedKeys = new Set();
 
 const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 const activeAnimations = new Set();
-let stampTimer = null;
 
 document.addEventListener("keydown", () => {
   document.body.dataset.input = "keyboard";
@@ -44,15 +45,6 @@ function animateFeedback(element, frames, duration = 200) {
 function enterFeedback(element) {
   animateFeedback(element, [{ opacity: 0.4, transform: "translateY(6px)" }, { opacity: 1, transform: "translateY(0)" }]);
 }
-function celebrateFiling() {
-  clearTimeout(stampTimer);
-  $("desk-clerk").classList.remove("working");
-  $("desk-clerk").classList.add("approved");
-  stampTimer = setTimeout(() => {
-    $("desk-clerk").classList.remove("approved");
-    stampTimer = null;
-  }, 1800);
-}
 
 class ApiError extends Error {
   constructor(status, message) {
@@ -72,7 +64,7 @@ async function api(path, options = {}) {
     if (options.signal?.aborted) throw error;
     throw new ApiError(
       0,
-      "The file office is unreachable. Check your connection, then give it another try.",
+      "Unable to connect. Check your connection, then try again.",
     );
   }
   if (response.status === 204) return null;
@@ -81,7 +73,7 @@ async function api(path, options = {}) {
     throw new ApiError(
       response.status,
       body.error ||
-        `The office returned an error (${response.status}). Please retry.`,
+        `The server returned an error (${response.status}). Please retry.`,
     );
   return body;
 }
@@ -93,30 +85,29 @@ function post(path, body) {
   });
 }
 function message(text, error = false) {
+  clearTimeout(noticeTimer);
   $("notice-text").textContent = text;
   $("notice").dataset.error = String(error);
   $("notice").setAttribute("role", error ? "alert" : "status");
   $("notice").setAttribute("aria-live", error ? "assertive" : "polite");
-  $("notice-illustration").hidden = error;
   $("notice").hidden = false;
   enterFeedback($("notice"));
+  if (!error) noticeTimer = setTimeout(() => { $("notice").hidden = true; }, 5000);
 }
 function sessionExpired(error) {
   if (error.status !== 401) return false;
   setSession(null);
   $("auth-error").textContent =
-    "Your session has ended. Sign in again to reopen your drawer.";
+    "Your session has ended. Sign in again to access your files.";
   $("auth-error").hidden = false;
   $("email").focus();
   return true;
 }
 function setSession(account) {
+  clearTimeout(noticeTimer);
   generation++;
-  clearTimeout(stampTimer);
-  stampTimer = null;
   for (const animation of activeAnimations) animation.cancel();
   activeAnimations.clear();
-  $("desk-clerk").classList.remove("working", "approved");
   listController?.abort();
   for (const timer of timers) clearTimeout(timer);
   timers.clear();
@@ -126,18 +117,23 @@ function setSession(account) {
   user = account;
   files = [];
   nextCursor = null;
+  currentPage = 0;
+  pageCursors = [null];
+  searchQuery = "";
+  $("file-search").value = "";
   selectedFile = null;
   $("file-list").replaceChildren();
   $("notice").hidden = true;
   $("auth-view").hidden = Boolean(user);
   $("workspace").hidden = !user;
   $("session-controls").hidden = !user;
-  $("office-note").hidden = Boolean(user);
+  $("auth-nav").hidden = Boolean(user);
+  $("workspace-nav").hidden = !user;
   document.body.dataset.authenticated = String(Boolean(user));
   enterFeedback(user ? $("workspace") : $("auth-view"));
   $("user-name").textContent = user?.username ?? "";
   $("greeting").textContent = user
-    ? `WELCOME TO YOUR DESK, ${user.username.toUpperCase()}.`
+    ? `Manage your uploaded PDFs, ${user.username}.`
     : "";
   $("password").value = "";
   $("password").type = "password";
@@ -160,14 +156,14 @@ function setMode(value) {
   $("username").required = register;
   $("password").autocomplete = register ? "new-password" : "current-password";
   $("auth-heading").textContent = register
-    ? "MAKE YOURSELF AT HOME."
-    : "YOUR DESK IS READY.";
+    ? "Create your account"
+    : "Sign in to your account";
   $("auth-description").textContent = register
-    ? "No interview. No tie. Just a place for your PDFs."
-    : "Sign in. Your PDFs have saved you a seat.";
+    ? "Enter your details to create an account."
+    : "Enter your details to access your files.";
   $("auth-submit-label").textContent = register
-    ? "Create my account"
-    : "Clock in";
+    ? "Create account"
+    : "Sign in";
   $("auth-error").hidden = true;
   enterFeedback($("auth-heading"));
 }
@@ -205,7 +201,7 @@ $("auth-form").addEventListener("submit", async (event) => {
   authPending(true);
   $("auth-error").hidden = true;
   $("auth-submit-label").textContent =
-    mode === "register" ? "Making it official…" : "Checking the register…";
+    mode === "register" ? "Creating account…" : "Signing in…";
   try {
     const result = await post(`/auth/${mode}`, body);
     setSession(result.user);
@@ -215,7 +211,7 @@ $("auth-form").addEventListener("submit", async (event) => {
   } finally {
     authPending(false);
     $("auth-submit-label").textContent =
-      mode === "register" ? "Create my account" : "Clock in";
+      mode === "register" ? "Create account" : "Sign in";
   }
 });
 $("logout").addEventListener("click", async () => {
@@ -232,6 +228,7 @@ $("logout").addEventListener("click", async () => {
   }
 });
 $("dismiss-notice").addEventListener("click", () => {
+  clearTimeout(noticeTimer);
   $("notice").hidden = true;
 });
 function bytes(value) {
@@ -270,13 +267,13 @@ function renderFiles(highlight) {
     row.querySelector(".receipt-id").textContent = String(file.id);
     row.querySelector(".receipt-owner").textContent = String(file.uploadedBy);
     row.querySelector(".receipt-key").textContent = file.key;
-    row.querySelector(".availability").textContent = file.available ? "In the drawer" : "Collected / unavailable";
+    row.querySelector(".availability").textContent = file.available ? "Available" : "Unavailable";
     const button = row.querySelector(".button-collect");
     const busy = collectingKeys.has(file.key);
     button.disabled = !file.available || busy;
     button.classList.toggle("busy", busy);
     button.setAttribute("aria-label", `Collect ${file.originalFilename}`);
-    button.querySelector("span").textContent = busy ? "Dispatching…" : file.available ? "Collect PDF" : "Not in drawer";
+    button.querySelector("span").textContent = busy ? "Preparing…" : file.available ? "Collect PDF" : "Unavailable";
     const issued = issuedLinks.get(file.key);
     const retry = row.querySelector(".retry-download");
     retry.hidden = !(issued && issued.expires > Date.now());
@@ -304,10 +301,17 @@ function renderFiles(highlight) {
     if (!wanted.has(row.dataset.key)) row.remove();
   }
   $("empty-state").hidden = files.length !== 0;
-  $("record-count").textContent = `${files.length} ${files.length === 1 ? "file" : "files"} in your private drawer`;
-  $("load-more").hidden = nextCursor === null;
+  $("record-count").textContent = `${files.length} ${files.length === 1 ? "file" : "files"} on this page`;
+  $("page-status").textContent = `Page ${currentPage + 1}`;
+  $("previous-page").disabled = currentPage === 0;
+  $("next-page").disabled = nextCursor === null;
+  $("empty-heading").textContent = searchQuery ? "No matching files" : "No files yet";
+  $("empty-description").textContent = searchQuery
+    ? "Try a different filename or clear your search."
+    : "Upload a PDF to keep it in your workspace.";
+  $("empty-choose").hidden = Boolean(searchQuery);
 }
-async function loadFiles(more = false, highlight) {
+async function loadFiles(page = 0, highlight, search = searchQuery) {
   if (!user) return;
   listController?.abort();
   const controller = new AbortController();
@@ -315,16 +319,22 @@ async function loadFiles(more = false, highlight) {
   const current = generation;
   $("list-error").hidden = true;
   $("refresh").disabled = true;
-  $("load-more").disabled = true;
+  $("previous-page").disabled = true;
+  $("next-page").disabled = true;
+  $("search-submit").disabled = true;
   $("list-loading").hidden = files.length > 0;
   $("empty-state").hidden = true;
   try {
-    const query = more && nextCursor !== null ? `?before=${nextCursor}` : "";
-    const result = await api(`/files${query}`, {
+    const query = new URLSearchParams({ limit: "10", search });
+    if (page > 0) query.set("before", pageCursors[page]);
+    const result = await api(`/files?${query}`, {
       signal: AbortSignal.any([controller.signal, AbortSignal.timeout(15000)]),
     });
-    if (current !== generation) return;
-    files = more ? [...files, ...result.files] : result.files;
+    if (current !== generation || listController !== controller) return;
+    files = result.files;
+    currentPage = page;
+    searchQuery = search;
+    pageCursors = [...pageCursors.slice(0, page + 1), result.nextCursor];
     nextCursor = result.nextCursor;
     maxUploadBytes = result.maxUploadBytes;
     $("upload-limit").textContent = `PDF only · up to ${bytes(maxUploadBytes)}`;
@@ -337,18 +347,25 @@ async function loadFiles(more = false, highlight) {
       $("list-error").hidden = false;
       $("record-count").textContent = files.length
         ? `${files.length} previously loaded records`
-        : "Drawer could not be checked";
+        : "Files could not be loaded";
     }
   } finally {
     if (current === generation && listController === controller) {
       $("refresh").disabled = false;
-      $("load-more").disabled = false;
+      $("previous-page").disabled = currentPage === 0;
+      $("next-page").disabled = nextCursor === null;
+      $("search-submit").disabled = false;
       $("list-loading").hidden = true;
     }
   }
 }
-$("refresh").addEventListener("click", () => loadFiles());
-$("load-more").addEventListener("click", () => loadFiles(true));
+$("refresh").addEventListener("click", () => loadFiles(currentPage));
+$("previous-page").addEventListener("click", () => loadFiles(currentPage - 1));
+$("next-page").addEventListener("click", () => loadFiles(currentPage + 1));
+$("file-search-form").addEventListener("submit", (event) => {
+  event.preventDefault();
+  loadFiles(0, undefined, $("file-search").value.trim());
+});
 async function selectFile(file) {
   if (!file || uploadBusy || !user) return;
   clearSelection();
@@ -381,13 +398,9 @@ async function selectFile(file) {
   $("selected-file").hidden = false;
   $("drop-zone").classList.add("has-file");
   enterFeedback($("selected-file"));
-  animateFeedback($("drop-zone").querySelector(".upload-symbol img"), [
-    { transform: "translateY(-6px) rotate(-5deg)" },
-    { transform: "translateY(0) rotate(-4deg)" },
-  ], 240);
   $("upload-submit").disabled = false;
   $("upload-status").textContent =
-    "A promising document. Ready for official filing.";
+    "Your PDF is ready to upload.";
 }
 function clearSelection() {
   selectionRevision++;
@@ -396,13 +409,14 @@ function clearSelection() {
   $("selected-file").hidden = true;
   $("drop-zone").classList.remove("has-file", "dragging");
   $("upload-submit").disabled = true;
-  $("upload-status").textContent = "No file selected. The clerk is on standby.";
+  $("upload-status").textContent = "Choose a PDF to get started.";
 }
 $("file-input").addEventListener("change", (event) =>
   selectFile(event.target.files[0]),
 );
 $("clear-file").addEventListener("click", clearSelection);
 $("empty-choose").addEventListener("click", () => $("file-input").click());
+$("choose-upload").addEventListener("click", () => $("file-input").click());
 for (const name of ["dragenter", "dragover"])
   $("drop-zone").addEventListener(name, (event) => {
     event.preventDefault();
@@ -433,27 +447,23 @@ $("upload-form").addEventListener("submit", async (event) => {
   $("clear-file").disabled = true;
   $("logout").disabled = true;
   $("upload-form").setAttribute("aria-busy", "true");
-  clearTimeout(stampTimer);
-  stampTimer = null;
-  $("desk-clerk").classList.remove("approved");
-  $("desk-clerk").classList.add("working");
-  $("upload-submit-label").textContent = "Filing in triplicate…";
+  $("upload-submit-label").textContent = "Uploading…";
   $("upload-status").textContent =
-    "Finding a cosy spot for your PDF…";
+    "Uploading your PDF. Please wait…";
   try {
     const result = await api("/files", { method: "POST", body: form });
     if (current !== generation) return;
     clearSelection();
     message(
-      "Filed with a smile. Your PDF is right at home in the drawer.",
+      "PDF uploaded. You can collect it from your files.",
     );
-    celebrateFiling();
-    await loadFiles(false, result.key);
+    await loadFiles(0, result.key, "");
+    $("file-search").value = "";
   } catch (error) {
     if (current === generation && !sessionExpired(error)) {
       message(error.message, true);
       $("upload-status").textContent =
-        "Filing failed. Your selected PDF is ready to retry.";
+        "Upload failed. Your selected PDF is ready to retry.";
     }
   } finally {
     uploadBusy = false;
@@ -461,9 +471,8 @@ $("upload-form").addEventListener("submit", async (event) => {
     $("clear-file").disabled = false;
     $("logout").disabled = false;
     $("upload-submit").disabled = !selectedFile;
-    $("upload-submit-label").textContent = "File this PDF";
+    $("upload-submit-label").textContent = "Upload PDF";
     $("upload-form").setAttribute("aria-busy", "false");
-    $("desk-clerk").classList.remove("working");
   }
 });
 async function collect(file, row) {
@@ -472,7 +481,7 @@ async function collect(file, row) {
   const button = row.querySelector(".button-collect");
   button.disabled = true;
   button.classList.add("busy");
-  button.querySelector("span").textContent = "Dispatching…";
+  button.querySelector("span").textContent = "Preparing…";
   const current = generation;
   try {
     const result = await api(`/files/${encodeURIComponent(file.key)}/download`);
@@ -510,7 +519,7 @@ async function collect(file, row) {
       file.available = false;
       renderFiles();
       message(
-        "This PDF is no longer in the drawer. Its database receipt is still here.",
+        "This PDF is no longer available. Its database receipt is still here.",
         true,
       );
     } else {
@@ -536,7 +545,7 @@ async function init() {
   } finally {
     authPending(false);
     $("auth-submit-label").textContent =
-      mode === "register" ? "Create my account" : "Clock in";
+      mode === "register" ? "Create account" : "Sign in";
   }
 }
 $("session-retry").addEventListener("click", init);
