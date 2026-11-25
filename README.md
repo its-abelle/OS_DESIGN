@@ -135,7 +135,7 @@ from running the commands.
 - **Download fails:** check the browser can reach `S3_PUBLIC_ENDPOINT`.
 - **Changed `.env`:** run `docker compose up -d --force-recreate backend cleanup frontend`.
 
-Complete the group details and attach your results to the [report](docs/REPORT.md).
+The [project report](docs/Report.md) documents the implementation and verified results.
 Include evidence for all six checks above. The supplied deadline is **the 26th**;
 confirm the month and submission details with the lecturer.
 
