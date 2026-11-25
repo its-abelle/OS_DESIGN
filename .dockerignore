@@ -9,3 +9,6 @@
 **/__pycache__
 docs
 migration-data*.json
+
+# Deployment state and provider binaries are not application build inputs.
+infra

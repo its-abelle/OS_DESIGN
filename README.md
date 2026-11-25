@@ -138,3 +138,7 @@ from running the commands.
 Complete the group details and attach your results to the [report](docs/REPORT.md).
 Include evidence for all six checks above. The supplied deadline is **the 26th**;
 confirm the month and submission details with the lecturer.
+
+## Deploy to Azure
+
+For a single-VM deployment of the full stack, use the [Terraform deployment guide](infra/azure/README.md). It includes HTTPS, subscription preparation, quota checks, deployment commands, and data-lifecycle notes.
