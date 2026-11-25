@@ -10,75 +10,56 @@ header('X-Content-Type-Options: nosniff');
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#183524" />
+    <meta name="theme-color" content="#ffffff" />
     <meta
       name="description"
-      content="A happy little home for your PDFs. File them, find them, and get on with your day."
+      content="A private workspace to upload and collect your PDFs."
     />
-    <title>Department of Files — Please file responsibly.</title>
+    <title>Department of Files — Your PDF workspace</title>
     <link rel="icon" href="/assets/file-pdf.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="/styles.css" />
-    <script type="module" src="/app.js"></script>
+    <link rel="stylesheet" href="/styles.css?v=<?= hash_file('sha256', __DIR__ . '/styles.css') ?>" />
+    <script type="module" src="/app.js?v=<?= hash_file('sha256', __DIR__ . '/app.js') ?>"></script>
   </head>
   <body data-authenticated="false">
-    <a class="skip-link" href="#main">Skip to the file office</a>
+    <a class="skip-link" href="#main">Skip to main content</a>
     <header class="masthead wrap">
       <a class="brand" href="/" aria-label="Department of Files home"
         ><span class="brand-mark" aria-hidden="true"
           ><img src="/assets/file-pdf.svg" alt="" /></span
-        ><span
-          >DEPARTMENT<br />OF FILES<span class="brand-caption"
-            >A little order. A lot less paperwork.</span
-          ></span
+        ><span>Department of Files</span
         ></a
       >
+      <nav class="workspace-nav" id="workspace-nav" aria-label="Main navigation" hidden>
+        <a href="#files-heading" aria-current="page">My files</a>
+      </nav>
       <div class="session-controls" id="session-controls" hidden>
         <span class="user-label"
-          ><i class="square-dot" aria-hidden="true"></i
           ><span id="user-name"></span></span
         ><button class="button button-outline" id="logout" type="button">
           <img src="/assets/sign-out.svg" alt="" />Sign out
         </button>
       </div>
-      <span class="office-note" id="office-note"
-        >NO PRINTING REQUIRED.<br />THE TREES SEND THEIR REGARDS.</span
-      >
+      <a class="header-link" id="auth-nav" href="#privacy-note">Privacy</a>
     </header>
     <main id="main" class="wrap" tabindex="-1">
       <section
         id="auth-view"
         class="entrance"
-        aria-labelledby="welcome-heading"
+        aria-labelledby="auth-heading"
       >
-        <div class="welcome-copy">
-          <p class="section-label">YOUR FRIENDLY NEIGHBOURHOOD FILE OFFICE</p>
-          <h1 id="welcome-heading">
-            YOUR PDFs.<br />A LITTLE<br /><em>LESS CHAOS.</em>
-          </h1>
-          <p class="intro">
-            A happy little home for your PDFs. Drop one in, collect it later,
-            and leave the filing to us.
-          </p>
-          <div class="clerk-scene" aria-hidden="true">
-            <img class="welcome-mascot" src="/assets/folder-friend.webp"
-              width="280" height="220" alt="" fetchpriority="high" />
-            <div class="speech-note">Big smile.<br />Tiny workload.</div>
-            <span class="office-seal">LESS MESS.<br />MORE YES.</span>
-          </div>
-        </div>
         <section class="auth-panel" aria-labelledby="auth-heading">
-          <div class="panel-tab">COME ON IN.</div>
+          <img class="auth-illustration" src="/assets/folder-friend.webp" width="144" height="112" alt="" aria-hidden="true" />
           <div class="auth-inner">
-          <div class="mode-switch" role="group" aria-label="Account action">
+            <div class="mode-switch" role="group" aria-label="Account action">
               <button type="button" id="login-mode" aria-pressed="true">
                 Sign in</button
               ><button type="button" id="register-mode" aria-pressed="false">
                 Create account
               </button>
             </div>
-            <h2 id="auth-heading">YOUR DESK IS READY.</h2>
+            <h1 id="auth-heading">Sign in to your account</h1>
             <p id="auth-description" class="muted">
-              Sign in. Your PDFs have saved you a seat.
+              Enter your details to access your files.
             </p>
             <form id="auth-form">
               <div id="username-field" hidden>
@@ -90,7 +71,7 @@ header('X-Content-Type-Options: nosniff');
                   minlength="3"
                   maxlength="50"
                   pattern="[a-zA-Z0-9_\-]{3,50}"
-                  placeholder="the_file_person"
+                  placeholder="your_username"
                   disabled
                 /><small>3–50 letters, numbers, underscores or hyphens.</small>
               </div>
@@ -102,7 +83,7 @@ header('X-Content-Type-Options: nosniff');
                   type="email"
                   autocomplete="email"
                   maxlength="254"
-                  placeholder="you@university.ac.ke"
+                  placeholder="you@example.com"
                   required
                 />
               </div>
@@ -141,29 +122,26 @@ header('X-Content-Type-Options: nosniff');
             <button class="text-button" id="session-retry" type="button" hidden>
               Retry connection
             </button>
-            <p class="auth-footnote">
-              <img src="/assets/lock-simple.svg" alt="" />Your account. Your
-              files. No communal cupboard.
+            <p class="auth-footnote" id="privacy-note">
+              <img src="/assets/lock-simple.svg" alt="" />Your files are private. Only you can access them.
             </p>
           </div>
         </section>
       </section>
       <section id="workspace" aria-labelledby="workspace-heading" hidden>
         <div class="workspace-heading">
-          <div>
-            <p class="section-label" id="greeting">YOUR PERSONAL FILE OFFICE</p>
-            <h1 id="workspace-heading">LET’S FILE SOMETHING.</h1>
-            <p>
-              A little space for your files. A little less on your mind.
+          <div class="workspace-title">
+            <img class="workspace-avatar" src="/assets/folder-friend.webp" width="80" height="80" alt="" />
+            <div>
+            <h1 id="workspace-heading">My files</h1>
+            <p id="greeting">
+              Manage your uploaded PDFs.
             </p>
+            </div>
           </div>
-          <div class="desk-clerk" id="desk-clerk" aria-hidden="true">
-            <img class="desk-folder" src="/assets/folder-friend.webp" width="144" height="112" alt="" />
-            <img class="desk-stamp" src="/assets/filed-stamp.webp" width="96" height="96" alt="" />
-          </div>
+          <button class="button button-primary" id="choose-upload" type="button">Upload a file<img src="/assets/arrow-right.svg" alt="" /></button>
         </div>
         <div class="notice" id="notice" role="status" aria-live="polite" hidden>
-          <img id="notice-illustration" class="notice-illustration" src="/assets/filed-stamp.webp" width="48" height="48" alt="" aria-hidden="true" hidden />
           <span id="notice-text"></span
           ><button
             type="button"
@@ -174,12 +152,64 @@ header('X-Content-Type-Options: nosniff');
           </button>
         </div>
         <div class="desk-layout">
+          <section class="files-panel" aria-labelledby="files-heading">
+            <div class="files-heading">
+              <div>
+                <h2 id="files-heading">All files</h2>
+                <p id="record-count" class="muted">Loading your files…</p>
+              </div>
+              <form class="file-search" id="file-search-form" role="search" aria-label="Search your files">
+                <label class="visually-hidden" for="file-search">Search filenames</label>
+                <input id="file-search" name="search" type="search" placeholder="Search files by name" maxlength="100" />
+                <button class="button" id="search-submit" type="submit">Search</button>
+              </form>
+              <button class="button button-small" id="refresh" type="button">
+                <img src="/assets/arrows-clockwise.svg" alt="" /><span
+                  >Refresh</span
+                >
+              </button>
+            </div>
+            <p class="list-error" id="list-error" role="alert" hidden></p>
+            <div class="list-loading" id="list-loading" role="status">
+              <span>Loading your files…</span><i></i><i></i><i></i>
+            </div>
+            <div class="empty-state" id="empty-state" hidden>
+              <span class="empty-icon" aria-hidden="true"
+                ><img src="/assets/open-folder.webp" width="120" height="96" alt=""
+              /></span>
+              <h3 id="empty-heading">No files yet</h3>
+              <p id="empty-description">
+                Upload a PDF to keep it in your workspace.
+              </p>
+              <button class="text-button" type="button" id="empty-choose">
+                Upload your first file
+              </button>
+            </div>
+            <div class="file-columns" aria-hidden="true">
+              <span>Name</span><span>Status</span><span>Action</span>
+            </div>
+            <ul
+              class="file-list"
+              id="file-list"
+              aria-label="Your uploaded files"
+            ></ul>
+            <nav class="pagination" aria-label="File pages">
+              <span id="page-status" role="status" aria-live="polite">Page 1</span>
+              <div>
+                <button class="button button-small" id="previous-page" type="button" disabled>Previous</button>
+                <button class="button button-small" id="next-page" type="button" disabled>Next</button>
+              </div>
+            </nav>
+            <div class="drawer-note">
+              <img src="/assets/lock-simple.svg" alt="" />
+              <p>Private by default. Only you can see and collect these files.</p>
+            </div>
+          </section>
           <section class="upload-panel" aria-labelledby="upload-heading">
-            <div class="panel-tab">INCOMING PAPERWORK</div>
             <div class="upload-inner">
-              <h2 id="upload-heading">FILE IT HERE.</h2>
+              <h2 id="upload-heading">Upload a PDF</h2>
               <p class="muted">
-                One PDF at a time. We’re an office, not a miracle.
+                Choose a file or drag it into the space below.
               </p>
               <form id="upload-form">
                 <label class="drop-zone" id="drop-zone" for="file-input"
@@ -190,7 +220,7 @@ header('X-Content-Type-Options: nosniff');
                     accept=".pdf,application/pdf"
                     class="visually-hidden"
                   /><span class="upload-symbol"
-                    ><img src="/assets/open-folder.webp" width="100" height="80" alt="" /></span
+                    ><img src="/assets/open-folder.webp" width="80" height="64" alt="" /></span
                   ><strong>Drop a PDF here</strong
                   ><span>or click to choose one</span
                   ><small id="upload-limit"
@@ -215,7 +245,7 @@ header('X-Content-Type-Options: nosniff');
                   type="submit"
                   disabled
                 >
-                  <span id="upload-submit-label">File this PDF</span
+                  <span id="upload-submit-label">Upload PDF</span
                   ><img src="/assets/arrow-right.svg" alt="" />
                 </button>
                 <p
@@ -224,63 +254,16 @@ header('X-Content-Type-Options: nosniff');
                   role="status"
                   aria-live="polite"
                 >
-                  No file selected. The clerk is on standby.
+                  Choose a PDF to get started.
                 </p>
               </form>
-              <div class="office-rule">
-                <span class="rule-number">!</span>
+              <div class="office-rule" id="collection-help">
                 <p>
-                  <strong>A small office rule</strong>Collecting a PDF removes
-                  it from the drawer. Its database receipt stays. Issued
+                  <strong>Before you collect</strong>Collecting a PDF removes
+                  it from storage. Its database receipt stays. Issued
                   download links work for 60 seconds.
                 </p>
               </div>
-            </div>
-          </section>
-          <section class="files-panel" aria-labelledby="files-heading">
-            <div class="files-heading">
-              <div>
-                <h2 id="files-heading">YOUR FILE DRAWER</h2>
-                <p id="record-count" class="muted">Opening the drawer…</p>
-              </div>
-              <button class="button button-small" id="refresh" type="button">
-                <img src="/assets/arrows-clockwise.svg" alt="" /><span
-                  >Refresh</span
-                >
-              </button>
-            </div>
-            <p class="list-error" id="list-error" role="alert" hidden></p>
-            <div class="list-loading" id="list-loading" role="status">
-              <span>Checking the filing cabinet…</span><i></i><i></i><i></i>
-            </div>
-            <div class="empty-state" id="empty-state" hidden>
-              <span class="empty-icon" aria-hidden="true"
-                ><img src="/assets/open-folder.webp" width="176" height="144" alt=""
-              /></span>
-              <h3>NOTHING TO MISPLACE. YET.</h3>
-              <p>
-                Every organised person starts somewhere.<br />Your first PDF will feel right at home.
-              </p>
-              <button class="text-button" type="button" id="empty-choose">
-                Choose your first PDF →
-              </button>
-            </div>
-            <ul
-              class="file-list"
-              id="file-list"
-              aria-label="Your uploaded files"
-            ></ul>
-            <button
-              class="button load-more"
-              id="load-more"
-              type="button"
-              hidden
-            >
-              Open the next drawer →
-            </button>
-            <div class="drawer-note">
-              <img src="/assets/lock-simple.svg" alt="" />
-              <p>A drawer with your name on it. Only you can see and collect these files.</p>
             </div>
           </section>
         </div>
@@ -288,13 +271,12 @@ header('X-Content-Type-Options: nosniff');
     </main>
     <footer class="footer wrap">
       <span
-        >DEPARTMENT OF FILES <span aria-hidden="true">/</span> YOUR LITTLE
-        FILE OFFICE</span
-      ><span>Less paperwork. More peace of mind.</span>
+        >Department of Files</span
+      ><span>Private document storage.</span>
     </footer>
     <noscript
       ><p class="noscript">
-        Enable JavaScript to sign in, file PDFs and view your drawer.
+        Enable JavaScript to sign in, upload PDFs and view your files.
       </p></noscript
     >
     <template id="file-template"
@@ -319,9 +301,9 @@ header('X-Content-Type-Options: nosniff');
             </dl>
           </details>
         </div>
+        <span class="availability"></span>
         <div class="file-action">
-          <span class="availability"></span
-          ><button class="button button-collect" type="button">
+          <button class="button button-collect" type="button">
             <img src="/assets/download-simple.svg" alt="" /><span
               >Collect PDF</span
             ></button

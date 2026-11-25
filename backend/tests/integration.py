@@ -6,6 +6,8 @@ Uses temporary accounts/objects, removed in finally. Never uses real accounts.
 """
 import concurrent.futures
 import http.cookiejar
+import hashlib
+import re
 import json
 from pathlib import Path
 import secrets
@@ -109,7 +111,13 @@ def run():
     alice, bob, anonymous = Client(), Client(), Client()
     try:
         status, page, _ = anonymous.request('/')
-        check(status == 200 and b'DEPARTMENT OF FILES' in page and b'<?php' not in page, 'PHP GUI served through Nginx')
+        check(status == 200 and b'<title>Department of Files' in page and b'<?php' not in page, 'PHP GUI served through Nginx')
+        for asset in ('styles.css', 'app.js'):
+            match = re.search(rb'/' + re.escape(asset.encode()) + rb'\?v=([a-f0-9]{64})', page)
+            check(match is not None, f'{asset} uses a content version')
+            asset_status, content, _ = anonymous.request('/' + asset + '?v=' + match[1].decode())
+            check(asset_status == 200 and hashlib.sha256(content).hexdigest().encode() == match[1],
+                  f'{asset} version matches the served content')
         status, health, _ = anonymous.request('/api/health')
         check(status == 200 and health['database'] == 'MySQL' and health['application'] == 'PHP', 'PHP connects to MySQL')
         check(anonymous.request('/api/files')[0] == 401, 'anonymous listing rejected')
@@ -141,6 +149,14 @@ def run():
         _, first_page, _ = alice.request('/api/files?limit=1')
         _, next_page, _ = alice.request('/api/files?limit=1&before='+str(first_page['nextCursor']))
         check(first_page['files'][0]['id'] == second['id'] and next_page['files'][0]['id'] == record['id'] and next_page['nextCursor'] is None, 'pagination returns only the account records in order')
+        status, matching, _ = alice.request('/api/files?search=SECOND')
+        check(status == 200 and [f['id'] for f in matching['files']] == [second['id']], 'filename search is case insensitive')
+        check(bob.request('/api/files?search=second')[1]['files'] == [], 'search stays private to the account')
+        check(alice.request('/api/files?search=%25')[1]['files'] == [] and alice.request('/api/files?search=_')[1]['files'] == [], 'search treats wildcard characters literally')
+        check(alice.request('/api/files?search[]=x')[0] == 400 and alice.request('/api/files?search='+'x'*101)[0] == 400, 'invalid search parameters rejected')
+        _, filtered_first, _ = alice.request('/api/files?limit=1&search=.pdf')
+        _, filtered_next, _ = alice.request('/api/files?limit=1&search=.pdf&before='+str(filtered_first['nextCursor']))
+        check(filtered_first['files'][0]['id'] == second['id'] and filtered_next['files'][0]['id'] == record['id'] and filtered_next['nextCursor'] is None, 'search works across paginated results')
         max_bytes = first_page['maxUploadBytes']
         check(alice.upload('oversized.pdf', b'%PDF-' + b'0' * max_bytes)[0] == 413, 'upload limit enforced')
         status, download, _ = alice.request('/api/files/'+key+'/download')

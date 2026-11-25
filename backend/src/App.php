@@ -169,10 +169,15 @@ final class App
     {
         $limit = self::positiveInteger($_GET['limit'] ?? '20', 20);
         $before = isset($_GET['before']) ? self::positiveInteger($_GET['before'], 2147483647) : 2147483647;
-        $query = $this->db->prepare('SELECT * FROM files WHERE uploaded_by = ? AND id < ? ORDER BY id DESC LIMIT ?');
+        $search = $_GET['search'] ?? '';
+        if (!is_string($search) || !mb_check_encoding($search, 'UTF-8') || mb_strlen($search, 'UTF-8') > 100) {
+            throw new ApiException('Search must be text of at most 100 characters');
+        }
+        $query = $this->db->prepare('SELECT * FROM files WHERE uploaded_by = ? AND id < ? AND LOCATE(LOWER(?), LOWER(original_filename)) > 0 ORDER BY id DESC LIMIT ?');
         $query->bindValue(1, $user['id'], PDO::PARAM_INT);
         $query->bindValue(2, $before, PDO::PARAM_INT);
-        $query->bindValue(3, $limit + 1, PDO::PARAM_INT);
+        $query->bindValue(3, trim($search), PDO::PARAM_STR);
+        $query->bindValue(4, $limit + 1, PDO::PARAM_INT);
         $query->execute();
         $rows = $query->fetchAll();
         $hasMore = count($rows) > $limit;
